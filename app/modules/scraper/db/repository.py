@@ -56,7 +56,7 @@ class ScraperRepository:
                     tender_id_str=tender_data.tender_id,
                     tender_name=tender_data.tender_name,
                     tender_url=tender_data.tender_url,
-                    drive_url=tender_data.drive_url,
+                    dms_folder_id=tender_data.dms_folder_id,
                     city=tender_data.city,
                     summary=tender_data.summary,
                     value=tender_data.value,

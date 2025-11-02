@@ -43,7 +43,7 @@ class ScrapedTender(Base):
     tender_id_str = Column(String, index=True)  # tender_id from pydantic model
     tender_name = Column(String)
     tender_url = Column(String)
-    drive_url = Column(String, nullable=True)
+    dms_folder_id = Column(UUID(as_uuid=True), nullable=True)
     city = Column(String)
     summary = Column(Text)
     value = Column(String)

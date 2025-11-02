@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field
-from typing import List
+from typing import List, Optional
+from uuid import UUID
 from datetime import datetime
 from enum import Enum
 
@@ -59,7 +60,7 @@ class Tender(BaseModel):
     tender_id: str
     tender_name: str
     tender_url: str
-    drive_url: str | None
+    dms_folder_id: Optional[UUID] = None
     city: str
     summary: str
     value: str

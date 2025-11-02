@@ -259,11 +259,12 @@ def generate_email(data: HomePageData) -> BeautifulSoup:
             tender_table_view_tender_link = new_tender_table.find('a', attrs={'class': 'tender_table_view_tender_link'})
             if not tender_table_view_tender_link:
                 raise Exception("Tender table view tender link not found")
-            tender_table_view_tender_link['href'] = tender_data.drive_url or tender_data.tender_url
+            tender_table_view_tender_link['href'] = tender_data.tender_url
             tender_table_redirect_to_website = new_tender_table.find('a', attrs={'class': 'tender_table_redirect_to_website'})
             if not tender_table_redirect_to_website:
                 raise Exception("Tender table redirect to website not found")
-            tender_table_redirect_to_website['href'] = f"http://3.6.93.207:3000/new-from-drive?driveUrl={tender_data.drive_url}"
+            # TODO: Update this link to point to the DMSIQ frontend when available
+            tender_table_redirect_to_website['href'] = tender_data.tender_url
 
             tender_query_table_body.append(new_tender_table)
 

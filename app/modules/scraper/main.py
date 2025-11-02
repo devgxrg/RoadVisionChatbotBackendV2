@@ -16,7 +16,7 @@ import os
 from app.db.database import SessionLocal
 from app.modules.scraper.db.repository import ScraperRepository
 from .detail_page_scrape import scrape_tender
-from .drive import authenticate_google_drive, download_folders, get_shareable_link, upload_folder_to_drive
+# from .drive import authenticate_google_drive, download_folders, get_shareable_link, upload_folder_to_drive
 from .email_sender import listen_and_get_link, send_html_email
 from .home_page_scrape import scrape_page
 from .templater import generate_email, reformat_page
@@ -56,7 +56,7 @@ def scrape_link(link: str):
                 removed_tenders[tender.tender_id] = json.loads(tender.model_dump_json(indent=2))
                 print("Error: " + str(e))
 
-    download_folders(homepage)
+    # download_folders(homepage) # NOTE: De-activated while switching to DMS
 
     # --- Save to Database ---
     db = SessionLocal()
