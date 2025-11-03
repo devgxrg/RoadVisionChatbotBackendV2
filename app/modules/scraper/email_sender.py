@@ -22,10 +22,10 @@ IMAP_SERVER = os.getenv("IMAP_SERVER") or "imap.gmail.com"
 
 TARGET_SENDERS = [
         "tenders@tenderdetail.com",
-        "wintersunset95@gmail.com",
-        "thenicsman@gmail.com",
-        "hardik@roadvision.ai",
-        "shubham@roadvision.ai",
+        # "wintersunset95@gmail.com",
+        # "thenicsman@gmail.com",
+        # "hardik@roadvision.ai",
+        # "shubham@roadvision.ai",
         ]
 
 def find_scrape_link(html_body: str) -> str | None:
