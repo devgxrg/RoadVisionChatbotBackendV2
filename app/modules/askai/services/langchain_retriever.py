@@ -10,6 +10,7 @@ Weaviate vector store and exposes it through LangChain's retriever interface.
 from typing import List, Dict, Any
 from uuid import UUID
 
+from pydantic import ConfigDict
 from langchain_core.retrievers import BaseRetriever
 from langchain_core.documents import Document
 from langchain_core.callbacks import CallbackManagerForRetrieverRun
@@ -38,9 +39,7 @@ class WeaviateRetriever(BaseRetriever):
     collection: Any  # Weaviate collection type
     top_k: int = settings.RAG_TOP_K
 
-    class Config:
-        """Allow arbitrary types for Weaviate objects."""
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     def _get_relevant_documents(
         self,

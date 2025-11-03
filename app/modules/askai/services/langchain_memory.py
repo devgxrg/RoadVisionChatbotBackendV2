@@ -14,13 +14,13 @@ from uuid import UUID
 from datetime import datetime
 from sqlalchemy.orm import Session
 
-from langchain.memory import ConversationMemory
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
+from langchain.memory import ConversationBufferMemory
 
 from app.modules.askai.db.repository import ChatRepository
 
 
-class DatabaseConversationMemory(ConversationMemory):
+class DatabaseConversationMemory:
     """
     LangChain-compatible conversation memory backed by PostgreSQL.
 
@@ -43,15 +43,22 @@ class DatabaseConversationMemory(ConversationMemory):
         max_history: int = 10,
     ):
         """Initialize memory with chat history from database."""
-        super().__init__()
         self.chat_repo = chat_repo
         self.chat_id = chat_id
         self.max_history = max_history
 
+        # Use ConversationBufferMemory as internal buffer
+        self.chat_memory = ConversationBufferMemory(
+            return_messages=True,
+            human_prefix="User",
+            ai_prefix="Assistant",
+        )
+
         # Load existing chat history from database
         self._load_history_from_db()
 
-        print(f"✅ Memory initialized for chat {chat_id} with {len(self.chat_memory.messages)} messages")
+        msg_count = len(self.chat_memory.chat_memory.messages) if hasattr(self.chat_memory, 'chat_memory') else 0
+        print(f"✅ Memory initialized for chat {chat_id} with {msg_count} messages")
 
     def _load_history_from_db(self) -> None:
         """
@@ -73,9 +80,9 @@ class DatabaseConversationMemory(ConversationMemory):
             # Convert to LangChain message objects
             for msg in messages:
                 if msg.sender == "user":
-                    self.chat_memory.add_user_message(msg.text)
+                    self.chat_memory.chat_memory.add_user_message(msg.text)
                 elif msg.sender == "bot":
-                    self.chat_memory.add_ai_message(msg.text)
+                    self.chat_memory.chat_memory.add_ai_message(msg.text)
 
             if messages:
                 print(f"📝 Loaded {len(messages)} messages from database for chat {self.chat_id}")
@@ -90,7 +97,7 @@ class DatabaseConversationMemory(ConversationMemory):
         Returns:
             List of LangChain message objects
         """
-        return self.chat_memory.messages
+        return self.chat_memory.chat_memory.messages
 
     def add_user_message(self, message: str) -> None:
         """
@@ -99,7 +106,7 @@ class DatabaseConversationMemory(ConversationMemory):
         Args:
             message: User's message text
         """
-        self.chat_memory.add_user_message(message)
+        self.chat_memory.chat_memory.add_user_message(message)
 
     def add_ai_message(self, message: str) -> None:
         """
@@ -108,7 +115,7 @@ class DatabaseConversationMemory(ConversationMemory):
         Args:
             message: AI's response text
         """
-        self.chat_memory.add_ai_message(message)
+        self.chat_memory.chat_memory.add_ai_message(message)
 
     def clear(self) -> None:
         """Clear conversation memory (keeps database history intact)."""
@@ -129,10 +136,16 @@ class DatabaseConversationMemory(ConversationMemory):
         messages = self.get_history_for_langchain()
 
         # Format as string for simple prompts
-        history_str = "\n".join([
-            f"{msg.type.upper()}: {msg.content}"
-            for msg in messages
-        ])
+        history_lines = []
+        for msg in messages:
+            if isinstance(msg, HumanMessage):
+                role = "USER"
+            elif isinstance(msg, AIMessage):
+                role = "ASSISTANT"
+            else:
+                role = "UNKNOWN"
+            history_lines.append(f"{role}: {msg.content}")
+        history_str = "\n".join(history_lines)
 
         return {
             "chat_history": history_str,
