@@ -21,6 +21,9 @@ class Settings:
     # RAG
     RAG_TOP_K: int = 15
 
+    # Feature Flags
+    USE_LANGCHAIN_RAG: bool = False  # Toggle for LangChain migration (Phase 1+)
+
     # API Keys
     GOOGLE_API_KEY: str = ""
     LLAMA_CLOUD_API_KEY: str = ""
@@ -84,6 +87,11 @@ class Settings:
         self.JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", self.JWT_SECRET_KEY)
         self.ALGORITHM = os.getenv("JWT_ALGORITHM", self.ALGORITHM)
         self.ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", self.ACCESS_TOKEN_EXPIRE_MINUTES))
+
+        # Load feature flags
+        self.USE_LANGCHAIN_RAG = os.getenv("USE_LANGCHAIN_RAG", "false").lower() == "true"
+        if self.USE_LANGCHAIN_RAG:
+            print("⚠️  LANGCHAIN_RAG: enabled (Phase 1+ migration in progress)")
 
 # Singleton instance
 settings = Settings()

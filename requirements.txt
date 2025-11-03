@@ -81,6 +81,8 @@ jsonschema-specifications
 kubernetes
 langchain
 langchain-core
+langchain-google-genai
+langchain-community
 langchain-mcp-adapters
 langgraph
 langgraph-checkpoint

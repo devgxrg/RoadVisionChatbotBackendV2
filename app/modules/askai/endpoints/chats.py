@@ -5,6 +5,8 @@ from sqlalchemy.orm import Session
 from app.modules.askai.models.chat import ChatMetadata, Message, NewMessageRequest, NewMessageResponse, RenameChatRequest, CreateNewChatRequest
 from app.modules.askai.services import chat_service, rag_service
 from app.db.database import get_db_session
+from app.config import settings
+from app.modules.askai.dependencies_langchain import get_langchain_rag_service
 
 router = APIRouter()
 
@@ -54,13 +56,23 @@ def rename_chat(
 def send_message(
     chat_id: UUID,
     payload: NewMessageRequest = Body(...),
-    db: Session = Depends(get_db_session)
+    db: Session = Depends(get_db_session),
+    langchain_service = Depends(get_langchain_rag_service),
 ):
     """Send a message to a chat and get a RAG-based response"""
     if not payload.message or not payload.message.strip():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Message cannot be empty")
-    
+
     try:
-        return rag_service.send_message_to_chat(db, chat_id, payload.message.strip())
+        # Feature flag: Use LangChain RAG if enabled, otherwise use old implementation
+        if settings.USE_LANGCHAIN_RAG:
+            response = langchain_service.send_message(chat_id, payload.message.strip())
+            return NewMessageResponse(
+                user_message=payload.message.strip(),
+                bot_response=response["response"],
+                sources=response["sources"]
+            )
+        else:
+            return rag_service.send_message_to_chat(db, chat_id, payload.message.strip())
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
