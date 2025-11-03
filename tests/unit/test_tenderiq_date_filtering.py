@@ -2,7 +2,7 @@
 Unit tests for TenderIQ Date Filtering Feature
 
 Tests for:
-- ScraperRepository date filtering methods
+- TenderIQRepository date filtering methods
 - TenderFilterService business logic
 - API endpoints (/dates and /tenders)
 """
@@ -13,7 +13,7 @@ from uuid import uuid4
 from unittest.mock import Mock, MagicMock, patch
 
 from app.modules.scraper.db.schema import ScrapeRun, ScrapedTenderQuery, ScrapedTender
-from app.modules.scraper.db.repository import ScraperRepository
+from app.modules.tenderiq.db.tenderiq_repository import TenderIQRepository
 from app.modules.tenderiq.services.tender_filter_service import TenderFilterService
 from app.modules.tenderiq.models.pydantic_models import (
     AvailableDatesResponse,
@@ -82,11 +82,11 @@ def mock_scrape_runs():
     return runs
 
 
-# ==================== ScraperRepository Tests ====================
+# ==================== TenderIQRepository Tests ====================
 
 
-class TestScraperRepository:
-    """Test ScraperRepository date filtering methods"""
+class TestTenderIQRepository:
+    """Test TenderIQRepository date filtering methods"""
 
     def test_get_scrape_runs_by_date_range_last_5_days(self, mock_db, mock_scrape_runs):
         """Test getting scrape runs from last 5 days"""
@@ -94,7 +94,7 @@ class TestScraperRepository:
             mock_scrape_runs[:5]
         )
 
-        repo = ScraperRepository(mock_db)
+        repo = TenderIQRepository(mock_db)
         result = repo.get_scrape_runs_by_date_range(days=5)
 
         # Verify we got runs
@@ -105,7 +105,7 @@ class TestScraperRepository:
         """Test getting all historical scrape runs"""
         mock_db.query.return_value.order_by.return_value.all.return_value = mock_scrape_runs
 
-        repo = ScraperRepository(mock_db)
+        repo = TenderIQRepository(mock_db)
         result = repo.get_scrape_runs_by_date_range(days=None)
 
         # Should return all runs when days is None
@@ -117,7 +117,7 @@ class TestScraperRepository:
             mock_scrape_runs
         )
 
-        repo = ScraperRepository(mock_db)
+        repo = TenderIQRepository(mock_db)
         result = repo.get_available_scrape_runs()
 
         assert result is not None
@@ -133,7 +133,7 @@ class TestScraperRepository:
             mock_tender
         ]
 
-        repo = ScraperRepository(mock_db)
+        repo = TenderIQRepository(mock_db)
         result = repo.get_tenders_by_scrape_run(scrape_run_id)
 
         assert result is not None
@@ -149,7 +149,7 @@ class TestScraperRepository:
             mock_tender
         ]
 
-        repo = ScraperRepository(mock_db)
+        repo = TenderIQRepository(mock_db)
         result = repo.get_tenders_by_scrape_run(
             scrape_run_id, category="Civil"
         )
@@ -163,14 +163,14 @@ class TestScraperRepository:
             mock_tender
         ]
 
-        repo = ScraperRepository(mock_db)
+        repo = TenderIQRepository(mock_db)
         result = repo.get_tenders_by_specific_date("2024-11-03")
 
         assert result is not None
 
     def test_get_tenders_by_specific_date_invalid_format(self, mock_db):
         """Test getting tenders by invalid date format raises error"""
-        repo = ScraperRepository(mock_db)
+        repo = TenderIQRepository(mock_db)
 
         with pytest.raises(ValueError, match="Invalid date format"):
             repo.get_tenders_by_specific_date("11-03-2024")
@@ -180,7 +180,7 @@ class TestScraperRepository:
         mock_tender = Mock(spec=ScrapedTender)
         mock_db.query.return_value.options.return_value.all.return_value = [mock_tender]
 
-        repo = ScraperRepository(mock_db)
+        repo = TenderIQRepository(mock_db)
         result = repo.get_all_tenders_with_filters(
             category="Civil", location="Mumbai"
         )
@@ -199,7 +199,7 @@ class TestTenderFilterService:
         service = TenderFilterService()
 
         with patch.object(
-            ScraperRepository, "get_available_scrape_runs", return_value=mock_scrape_runs
+            TenderIQRepository, "get_available_scrape_runs", return_value=mock_scrape_runs
         ):
             result = service.get_available_dates(mock_db)
 
@@ -213,7 +213,7 @@ class TestTenderFilterService:
         service = TenderFilterService()
 
         with patch.object(
-            ScraperRepository, "get_available_scrape_runs", return_value=mock_scrape_runs
+            TenderIQRepository, "get_available_scrape_runs", return_value=mock_scrape_runs
         ):
             result = service.get_available_dates(mock_db)
 
@@ -230,7 +230,7 @@ class TestTenderFilterService:
         service = TenderFilterService()
 
         with patch.object(
-            ScraperRepository, "get_available_scrape_runs", return_value=mock_scrape_runs[:1]
+            TenderIQRepository, "get_available_scrape_runs", return_value=mock_scrape_runs[:1]
         ):
             result = service.get_available_dates(mock_db)
 
@@ -245,9 +245,9 @@ class TestTenderFilterService:
         mock_tenders = [Mock(spec=ScrapedTender) for _ in range(3)]
 
         with patch.object(
-            ScraperRepository, "get_scrape_runs_by_date_range", return_value=[]
+            TenderIQRepository, "get_scrape_runs_by_date_range", return_value=[]
         ), patch.object(
-            ScraperRepository, "get_available_scrape_runs", return_value=[]
+            TenderIQRepository, "get_available_scrape_runs", return_value=[]
         ):
             result = service.get_tenders_by_date_range(mock_db, "last_5_days")
 
@@ -266,9 +266,9 @@ class TestTenderFilterService:
         service = TenderFilterService()
 
         with patch.object(
-            ScraperRepository, "get_scrape_runs_by_date_range", return_value=[]
+            TenderIQRepository, "get_scrape_runs_by_date_range", return_value=[]
         ), patch.object(
-            ScraperRepository, "get_available_scrape_runs", return_value=[]
+            TenderIQRepository, "get_available_scrape_runs", return_value=[]
         ):
             result = service.get_tenders_by_date_range(
                 mock_db, "last_5_days", category="Civil"
@@ -282,11 +282,11 @@ class TestTenderFilterService:
         service = TenderFilterService()
 
         with patch.object(
-            ScraperRepository,
+            TenderIQRepository,
             "get_tenders_by_specific_date",
             return_value=[],
         ), patch.object(
-            ScraperRepository, "get_available_scrape_runs", return_value=[]
+            TenderIQRepository, "get_available_scrape_runs", return_value=[]
         ):
             result = service.get_tenders_by_specific_date(mock_db, "2024-11-03")
 
@@ -298,7 +298,7 @@ class TestTenderFilterService:
         service = TenderFilterService()
 
         with patch.object(
-            ScraperRepository,
+            TenderIQRepository,
             "get_tenders_by_specific_date",
             side_effect=ValueError("Invalid date format"),
         ):
@@ -310,9 +310,9 @@ class TestTenderFilterService:
         service = TenderFilterService()
 
         with patch.object(
-            ScraperRepository, "get_all_tenders_with_filters", return_value=[]
+            TenderIQRepository, "get_all_tenders_with_filters", return_value=[]
         ), patch.object(
-            ScraperRepository, "get_available_scrape_runs", return_value=[]
+            TenderIQRepository, "get_available_scrape_runs", return_value=[]
         ):
             result = service.get_all_tenders(mock_db)
 
@@ -324,9 +324,9 @@ class TestTenderFilterService:
         service = TenderFilterService()
 
         with patch.object(
-            ScraperRepository, "get_all_tenders_with_filters", return_value=[]
+            TenderIQRepository, "get_all_tenders_with_filters", return_value=[]
         ), patch.object(
-            ScraperRepository, "get_available_scrape_runs", return_value=[]
+            TenderIQRepository, "get_available_scrape_runs", return_value=[]
         ):
             result = service.get_all_tenders(
                 mock_db, category="Civil", location="Mumbai"
@@ -351,12 +351,12 @@ class TestTenderFilterService:
         """Test that available dates list returns correct format"""
         service = TenderFilterService()
         mock_runs = [
-            Mock(run_at=datetime(2024, 11, 3)),
-            Mock(run_at=datetime(2024, 11, 2)),
+            Mock(run_at=datetime(2024, 11, 3), date_str="Sunday, Nov 03, 2024"),
+            Mock(run_at=datetime(2024, 11, 2), date_str="Saturday, Nov 02, 2024"),
         ]
 
         with patch.object(
-            ScraperRepository, "get_available_scrape_runs", return_value=mock_runs
+            TenderIQRepository, "get_available_scrape_runs", return_value=mock_runs
         ):
             dates = service._get_available_dates_list(mock_db)
 
@@ -376,7 +376,7 @@ class TestDateFilteringIntegration:
         service = TenderFilterService()
 
         with patch.object(
-            ScraperRepository, "get_available_scrape_runs", return_value=mock_scrape_runs[:3]
+            TenderIQRepository, "get_available_scrape_runs", return_value=mock_scrape_runs[:3]
         ):
             result = service.get_available_dates(mock_db)
 
@@ -397,11 +397,11 @@ class TestDateFilteringIntegration:
         service = TenderFilterService()
 
         with patch.object(
-            ScraperRepository, "get_all_tenders_with_filters", return_value=[]
+            TenderIQRepository, "get_all_tenders_with_filters", return_value=[]
         ), patch.object(
-            ScraperRepository, "get_available_scrape_runs", return_value=[]
+            TenderIQRepository, "get_available_scrape_runs", return_value=[]
         ), patch.object(
-            ScraperRepository, "get_tenders_by_specific_date", return_value=[]
+            TenderIQRepository, "get_tenders_by_specific_date", return_value=[]
         ):
             # When include_all_dates=True, should use get_all_tenders
             result = service.get_all_tenders(mock_db)
@@ -431,9 +431,9 @@ class TestDateFilteringIntegration:
         service = TenderFilterService()
 
         with patch.object(
-            ScraperRepository, "get_all_tenders_with_filters", return_value=mock_tenders
+            TenderIQRepository, "get_all_tenders_with_filters", return_value=mock_tenders
         ), patch.object(
-            ScraperRepository, "get_available_scrape_runs", return_value=[]
+            TenderIQRepository, "get_available_scrape_runs", return_value=[]
         ):
             result = service.get_all_tenders(mock_db)
 
@@ -445,9 +445,9 @@ class TestDateFilteringIntegration:
         service = TenderFilterService()
 
         with patch.object(
-            ScraperRepository, "get_all_tenders_with_filters", return_value=[]
+            TenderIQRepository, "get_all_tenders_with_filters", return_value=[]
         ), patch.object(
-            ScraperRepository, "get_available_scrape_runs", return_value=[]
+            TenderIQRepository, "get_available_scrape_runs", return_value=[]
         ):
             result = service.get_all_tenders(mock_db)
 

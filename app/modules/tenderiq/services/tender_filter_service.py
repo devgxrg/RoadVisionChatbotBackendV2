@@ -14,7 +14,7 @@ from typing import Optional
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 
-from app.modules.scraper.db.repository import ScraperRepository
+from app.modules.tenderiq.db.tenderiq_repository import TenderIQRepository
 from app.modules.tenderiq.models.pydantic_models import (
     AvailableDatesResponse,
     FilteredTendersResponse,
@@ -42,7 +42,7 @@ class TenderFilterService:
         Returns:
             AvailableDatesResponse with list of all available dates and tender counts
         """
-        repo = ScraperRepository(db)
+        repo = TenderIQRepository(db)
         scrape_runs = repo.get_available_scrape_runs()
 
         dates_info = []
@@ -52,14 +52,20 @@ class TenderFilterService:
             # Count total tenders across all queries in this scrape run
             tender_count = sum(len(query.tenders) for query in scrape_run.queries)
 
-            # Use run_at timestamp for consistent date derivation
-            # This ensures date (YYYY-MM-DD) and date_str are derived from the same source
-            date_only = scrape_run.run_at.strftime("%Y-%m-%d")
-            date_str_formatted = scrape_run.run_at.strftime("%A, %B %d, %Y")
+            # Use date_str from website header (when tenders were actually released)
+            # Parse the date_str to extract date in YYYY-MM-DD format for consistency
+            date_str = scrape_run.date_str
+            try:
+                # Parse the date_str from website (e.g., "Sunday, Nov 02, 2025")
+                parsed_date = datetime.strptime(date_str, "%A, %b %d,%Y")
+                date_only = parsed_date.strftime("%Y-%m-%d")
+            except (ValueError, AttributeError):
+                # Fallback to run_at if date_str format is unexpected
+                date_only = scrape_run.run_at.strftime("%Y-%m-%d")
 
             date_obj = ScrapeDateInfo(
                 date=date_only,
-                date_str=date_str_formatted,
+                date_str=date_str,
                 run_at=scrape_run.run_at,
                 tender_count=tender_count,
                 is_latest=is_first,
@@ -110,7 +116,7 @@ class TenderFilterService:
             )
 
         days = range_to_days[date_range]
-        repo = ScraperRepository(db)
+        repo = TenderIQRepository(db)
 
         # Get all tenders from scrape runs in the date range
         all_tenders = []
@@ -169,7 +175,7 @@ class TenderFilterService:
         Raises:
             ValueError: If date format is invalid
         """
-        repo = ScraperRepository(db)
+        repo = TenderIQRepository(db)
 
         try:
             tenders = repo.get_tenders_by_specific_date(
@@ -220,7 +226,7 @@ class TenderFilterService:
         Returns:
             FilteredTendersResponse with all tenders
         """
-        repo = ScraperRepository(db)
+        repo = TenderIQRepository(db)
 
         tenders = repo.get_all_tenders_with_filters(
             category=category,
@@ -258,9 +264,21 @@ class TenderFilterService:
         Returns:
             List of date strings
         """
-        repo = ScraperRepository(db)
+        repo = TenderIQRepository(db)
         scrape_runs = repo.get_available_scrape_runs()
-        return [run.run_at.strftime("%Y-%m-%d") for run in scrape_runs]
+
+        dates_list = []
+        for run in scrape_runs:
+            # Parse date_str from website header to extract YYYY-MM-DD format
+            date_str = run.date_str
+            try:
+                parsed_date = datetime.strptime(date_str, "%A, %b %d,%Y")
+                dates_list.append(parsed_date.strftime("%Y-%m-%d"))
+            except (ValueError, AttributeError):
+                # Fallback to run_at if date_str format is unexpected
+                dates_list.append(run.run_at.strftime("%Y-%m-%d"))
+
+        return dates_list
 
     def _tender_to_response(self, tender) -> TenderResponseForFiltering:
         """
