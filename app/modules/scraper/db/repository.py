@@ -1,5 +1,5 @@
 from typing import Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date as date_type
 
 from sqlalchemy.orm import Session, joinedload
 
@@ -33,12 +33,28 @@ class ScraperRepository:
             .first()
         )
 
-    def create_scrape_run(self, homepage_data: HomePageData) -> ScrapeRun:
+    def create_scrape_run(self, homepage_data: HomePageData, tender_release_date: Optional[date_type] = None) -> ScrapeRun:
         """
         Creates a new scrape run and all its related entities in the database
         from the provided Pydantic model.
+
+        Args:
+            homepage_data: The scraped data to save
+            tender_release_date: The date tenders were released (from website header).
+                                If not provided, will be parsed from homepage_data.header.date
         """
+        from app.modules.scraper.services.dms_integration_service import _parse_date_to_date_object
+
+        # If tender_release_date not provided, parse it from the header
+        if tender_release_date is None:
+            tender_release_date = _parse_date_to_date_object(homepage_data.header.date)
+
+        # Fallback to today's date if parsing fails
+        if tender_release_date is None:
+            tender_release_date = datetime.utcnow().date()
+
         scrape_run = ScrapeRun(
+            tender_release_date=tender_release_date,
             date_str=homepage_data.header.date,
             name=homepage_data.header.name,
             contact=homepage_data.header.contact,

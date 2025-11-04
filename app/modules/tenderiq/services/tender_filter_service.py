@@ -36,6 +36,9 @@ class TenderFilterService:
 
         Used by frontend to populate date selector dropdown.
 
+        Tenders are grouped by tender_release_date (when they were released),
+        not by run_at (when we scraped them).
+
         Args:
             db: SQLAlchemy database session
 
@@ -52,16 +55,13 @@ class TenderFilterService:
             # Count total tenders across all queries in this scrape run
             tender_count = sum(len(query.tenders) for query in scrape_run.queries)
 
-            # Use date_str from website header (when tenders were actually released)
-            # Parse the date_str to extract date in YYYY-MM-DD format for consistency
+            # Use tender_release_date (when tenders were actually released from website header)
+            # This is the canonical date for grouping - not when we scraped them
             date_str = scrape_run.date_str
-            try:
-                # Parse the date_str from website (e.g., "Sunday, Nov 02, 2025")
-                parsed_date = datetime.strptime(date_str, "%A, %b %d,%Y")
-                date_only = parsed_date.strftime("%Y-%m-%d")
-            except (ValueError, AttributeError):
-                # Fallback to run_at if date_str format is unexpected
-                date_only = scrape_run.run_at.strftime("%Y-%m-%d")
+            tender_release_date = scrape_run.tender_release_date
+
+            # Format the tender_release_date to YYYY-MM-DD
+            date_only = tender_release_date.strftime("%Y-%m-%d") if tender_release_date else ""
 
             date_obj = ScrapeDateInfo(
                 date=date_only,
@@ -258,6 +258,8 @@ class TenderFilterService:
         """
         Get list of all available dates as strings (YYYY-MM-DD format).
 
+        Uses tender_release_date (when tenders were released), not run_at (when we scraped them).
+
         Args:
             db: SQLAlchemy database session
 
@@ -269,14 +271,10 @@ class TenderFilterService:
 
         dates_list = []
         for run in scrape_runs:
-            # Parse date_str from website header to extract YYYY-MM-DD format
-            date_str = run.date_str
-            try:
-                parsed_date = datetime.strptime(date_str, "%A, %b %d,%Y")
-                dates_list.append(parsed_date.strftime("%Y-%m-%d"))
-            except (ValueError, AttributeError):
-                # Fallback to run_at if date_str format is unexpected
-                dates_list.append(run.run_at.strftime("%Y-%m-%d"))
+            # Use tender_release_date for consistent grouping by tender release date
+            tender_release_date = run.tender_release_date
+            if tender_release_date:
+                dates_list.append(tender_release_date.strftime("%Y-%m-%d"))
 
         return dates_list
 

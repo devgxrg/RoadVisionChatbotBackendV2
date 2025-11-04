@@ -1,7 +1,7 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, date
 
-from sqlalchemy import Column, String, DateTime, ForeignKey, Text, Index, Boolean
+from sqlalchemy import Column, String, DateTime, Date, ForeignKey, Text, Index, Boolean
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
@@ -48,8 +48,12 @@ class ScrapeRun(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     run_at = Column(DateTime, default=datetime.utcnow, index=True)
 
+    # Tender release date (from website header, parsed from date_str)
+    # Used for grouping tenders by when they were released, not when we scraped them
+    tender_release_date = Column(Date, nullable=False, index=True)
+
     # from HomePageHeader
-    date_str = Column(String)  # 'date' from header
+    date_str = Column(String)  # 'date' from header (e.g., "Sunday, Nov 02, 2025")
     name = Column(String)
     contact = Column(String)
     no_of_new_tenders = Column(String)

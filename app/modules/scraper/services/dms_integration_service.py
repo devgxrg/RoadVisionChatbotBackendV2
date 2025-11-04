@@ -1,5 +1,6 @@
 import mimetypes
 from uuid import uuid4
+from datetime import date as date_type
 
 import requests
 from dateutil import parser
@@ -25,26 +26,48 @@ def _parse_date(date_string: str) -> str:
         return "unknown-date"
 
 
-def process_tenders_for_dms(db: Session, homepage_data: HomePageData) -> HomePageData:
+def _parse_date_to_date_object(date_string: str) -> date_type:
+    """
+    Parses a date string and returns a date object.
+    Used for setting tender_release_date in ScrapeRun.
+    """
+    if not date_string:
+        return None
+    try:
+        date_object = parser.parse(date_string)
+        return date_object.date()
+    except (parser.ParserError, ValueError):
+        print(f"⚠️  Warning: Could not parse date string '{date_string}', returning None.")
+        return None
+
+
+def process_tenders_for_dms(db: Session, homepage_data: HomePageData) -> tuple[HomePageData, date_type]:
     """
     Processes scraped tender data to create folders and upload files to DMS.
     Updates the tender objects with their new DMS folder IDs.
+
+    Returns:
+        tuple: (updated_homepage_data, tender_release_date)
+        where tender_release_date is parsed from the website header
     """
     print("\n🔄 Starting DMS integration process...")
     dms_service = DmsService(db)
     system_user_id = uuid4()  # Placeholder for a system user
+
+    # Parse the tender release date from website header
+    tender_release_date = _parse_date_to_date_object(homepage_data.header.date)
+    date_str = _parse_date(homepage_data.header.date)
 
     # Get or create the root folder for daily tenders
     try:
         root_folder_path = "/Daily Tenders/"
         dms_service.get_or_create_folder_by_path(root_folder_path, system_user_id)
 
-        date_str = _parse_date(homepage_data.header.date)
         date_folder_path = f"{root_folder_path}{date_str}/"
         dms_service.get_or_create_folder_by_path(date_folder_path, system_user_id)
     except Exception as e:
         print(f"❌ CRITICAL: Could not create base DMS directories. Aborting DMS processing. Error: {e}")
-        return homepage_data
+        return homepage_data, tender_release_date
 
     for query in homepage_data.query_table:
         for tender in query.tenders:
@@ -66,7 +89,7 @@ def process_tenders_for_dms(db: Session, homepage_data: HomePageData) -> HomePag
                     response = requests.get(file_data.file_url)
                     response.raise_for_status()  # Raise an exception for bad status codes
                     file_content = response.content
-                    
+
                     # Guess MIME type
                     mime_type, _ = mimetypes.guess_type(file_data.file_name)
                     if mime_type is None:
@@ -88,4 +111,4 @@ def process_tenders_for_dms(db: Session, homepage_data: HomePageData) -> HomePag
                 print(f"    ❌ An error occurred processing tender {tender.tender_id} for DMS: {e}")
 
     print("✅ DMS integration process complete.")
-    return homepage_data
+    return homepage_data, tender_release_date

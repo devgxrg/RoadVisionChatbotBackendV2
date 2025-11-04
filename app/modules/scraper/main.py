@@ -122,12 +122,12 @@ def scrape_link(link: str):
         try:
             with ScrapeSection(tracker, "DMS Integration & Database Save"):
                 logger.info("🔄 Processing tenders for DMS integration...")
-                homepage = process_tenders_for_dms(db, homepage)
+                homepage, tender_release_date = process_tenders_for_dms(db, homepage)
                 tracker.update_progress("database", 1, "DMS integration completed")
 
                 logger.info("💾 Saving scraped data to database...")
                 scraper_repo = ScraperRepository(db)
-                scraper_repo.create_scrape_run(homepage)
+                scraper_repo.create_scrape_run(homepage, tender_release_date)
                 tracker.update_progress("database", 1, "Database save completed")
 
                 num_tenders = sum(len(q.tenders) for q in homepage.query_table)
