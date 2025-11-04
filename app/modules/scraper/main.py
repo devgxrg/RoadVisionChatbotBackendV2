@@ -46,21 +46,74 @@ def insert_drive_links(soup: BeautifulSoup):
     for tender1, tender2 in zip(soup1_tenders_links, soup2_tenders_links):
         tender1['href'] = tender2.find_all('a')[0]['href']
 
-def scrape_link(link: str):
+def scrape_link(link: str, source_priority: str = "normal", skip_dedup_check: bool = False):
     """
     Main scraping function with comprehensive progress tracking and logging.
+    Supports both manual link pasting and email-based scraping with unified deduplication.
 
     Flow:
-    1. Scrape home page
-    2. Scrape detail pages for each tender
-    3. DMS integration
-    4. Save to database
-    5. Generate and send email
+    1. Check for duplicates (with priority-based conflict resolution)
+    2. Scrape home page
+    3. Scrape detail pages for each tender
+    4. DMS integration
+    5. Save to database
+    6. Log processing and generate/send email
+
+    Args:
+        link: The tender URL to scrape
+        source_priority: "low", "normal", or "high" - used for conflict resolution when same tender from multiple sources
+        skip_dedup_check: If True, skip deduplication check (use with caution, mainly for testing)
     """
     tracker = ProgressTracker(verbose=True)
     start_time = datetime.now()
 
     try:
+        # Initialize database connection for deduplication check
+        db = SessionLocal()
+        scraper_repo = ScraperRepository(db)
+
+        # Step 0: Deduplication Check (before any scraping)
+        if not skip_dedup_check:
+            with ScrapeSection(tracker, "Deduplication Check"):
+                is_duplicate, existing_log = scraper_repo.check_tender_duplicate_with_priority(link, source_priority)
+
+                if is_duplicate:
+                    logger.info(f"⏭️  DUPLICATE TENDER DETECTED: {link}")
+                    logger.info(f"   Previously processed by: {existing_log.email_sender} on {existing_log.processed_at}")
+
+                    priority_order = {"low": 0, "normal": 1, "high": 2}
+                    source_level = priority_order.get(source_priority, 1)
+                    existing_level = priority_order.get(existing_log.priority, 1)
+
+                    if source_level > existing_level:
+                        logger.info(f"   ✅ Higher priority detected! Re-processing tender...")
+                        # Mark old one as superseded
+                        scraper_repo.mark_superseded(
+                            str(existing_log.id),
+                            f"Reprocessed with higher priority ({source_priority})"
+                        )
+                        logger.info(f"   Marked previous entry as superseded")
+                    else:
+                        logger.warning(f"   ⚠️  Same or lower priority. Skipping scrape.")
+                        logger.info(f"   To re-scrape, use source_priority='high'")
+
+                        # Log this as skipped
+                        scraper_repo.log_email_processing(
+                            email_uid="manual" if source_priority != "normal" else "duplicate_check",
+                            email_sender="manual_override" if source_priority != "normal" else "automatic",
+                            email_received_at=datetime.utcnow(),
+                            tender_url=link,
+                            processing_status="skipped",
+                            error_message=f"Duplicate tender (existing: {existing_log.priority}, new: {source_priority})",
+                            priority=source_priority
+                        )
+                        db.close()
+                        tracker.close_all_progress_bars()
+                        return
+                else:
+                    logger.info(f"✅ No duplicates found. Proceeding with scrape...")
+        db.close()
+
         with ScrapeSection(tracker, "Homepage Scraping"):
             logger.info(f"📍 Starting scrape of: {link}")
             homepage = scrape_page(link)
