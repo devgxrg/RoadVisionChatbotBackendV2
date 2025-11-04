@@ -9,6 +9,7 @@ making the modules properly decoupled and independently testable.
 """
 
 from typing import Optional
+from uuid import UUID
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session, joinedload
 
