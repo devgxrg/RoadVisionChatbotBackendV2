@@ -5,7 +5,7 @@ Extracts scope of work, deliverables, and effort estimation from tender document
 """
 
 from typing import List, Optional
-from uuid import UUID
+from uuid import UUID, uuid4
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 
@@ -27,23 +27,17 @@ class ScopeExtractionService:
 
     def extract_scope(
         self,
-        db: Session,
-        analysis_id: UUID,
         tender_id: UUID,
     ) -> ScopeOfWorkResponse:
         """
         Extract scope of work from tender documents.
 
         Args:
-            db: Database session
-            analysis_id: Analysis record ID
             tender_id: Tender to analyze
 
         Returns:
             ScopeOfWorkResponse with extracted scope information
         """
-        repo = AnalyzeRepository(db)
-
         # TODO: Fetch tender documents from ScrapedTender
         # TODO: Parse documents and extract scope of work using LLM
 
@@ -126,7 +120,7 @@ class ScopeExtractionService:
 
             work_items.append(
                 WorkItemResponse(
-                    id=None,  # Will be UUID in DB
+                    id=uuid4(),
                     description=item_desc,
                     estimated_duration=estimated_duration,
                     priority=self._determine_priority(i, len(item_descriptions)),
@@ -179,7 +173,7 @@ class ScopeExtractionService:
 
             deliverables.append(
                 DeliverableResponse(
-                    id=None,  # Will be UUID in DB
+                    id=uuid4(),
                     description=deliverable_name,
                     delivery_date=(datetime.now() + timedelta(days=delivery_offset_days)).strftime("%Y-%m-%d"),
                     acceptance_criteria=[

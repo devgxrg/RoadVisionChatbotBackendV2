@@ -20,15 +20,15 @@ These items address critical bugs and incomplete features that prevent the modul
     -   **Issue:** The `process_analysis` function is a skeleton. The core logic for document parsing, risk assessment, RFP analysis, etc., is commented out with `# TODO`.
     -   **Fix:** Implement the commented-out steps to call the real, asynchronous analysis services.
 
--   **[ ] Fix Orphaned Analysis Records Bug**
+-   **[x] Fix Orphaned Analysis Records Bug**
     -   **File:** `app/modules/tenderiq/endpoints/analyze.py`
     -   **Issue:** On-demand endpoints (`/risks`, `/rfp-sections`, etc.) create new `TenderAnalysis` records in the database every time they are called, but these records are never processed or cleaned up.
-    -   **Fix:** Stop creating new analysis records in these endpoints. (See architectural improvements for a long-term solution).
+    -   **Fix:** Refactored the on-demand endpoints and their services to be stateless and removed all database record creation logic.
 
--   **[ ] Fix Pydantic Validation Error in Scope of Work**
+-   **[x] Fix Pydantic Validation Error in Scope of Work**
     -   **Files:** `app/modules/tenderiq/services/scope_extraction_service.py`, `app/modules/tenderiq/models/pydantic_models.py`
     -   **Issue:** `WorkItemResponse` and `DeliverableResponse` are created with `id=None`, but the Pydantic model expects `id: UUID`, causing a 500 error.
-    -   **Fix:** Ensure a valid UUID is generated for the `id` field when creating these objects in the service layer, or update the model to allow `id` to be optional if it's not yet persisted.
+    -   **Fix:** Ensured a valid UUID is generated for the `id` field when creating these objects in the service layer as part of the stateless refactor.
 
 -   **[ ] Remove Mock Data from "On-Demand" Endpoints**
     -   **Endpoints:** `/tender/{tender_id}/risks`, `/tender/{tender_id}/rfp-sections`, `/tender/{tender_id}/scope-of-work`, `/tender/{tender_id}/one-pager`.

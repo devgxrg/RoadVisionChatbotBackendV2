@@ -300,22 +300,9 @@ def get_risk_assessment(
     - `404 Not Found` - Tender not found
     """
     try:
-        # For now, create a temporary analysis record for this request
-        # TODO: Check for existing analysis or create new one
-        from app.modules.tenderiq.db.repository import AnalyzeRepository
-
-        repo = AnalyzeRepository(db)
-        analysis = repo.create_analysis(
-            tender_id=tender_id,
-            user_id=current_user.id,
-            analysis_type="risk-only",
-        )
-
         service = RiskAssessmentService()
 
         risk_response = service.assess_risks(
-            db=db,
-            analysis_id=analysis.id,
             tender_id=tender_id,
             depth=depth,
             include_historical=include_historical,
@@ -387,21 +374,9 @@ def get_rfp_sections(
     - `404 Not Found` - Tender not found
     """
     try:
-        from app.modules.tenderiq.db.repository import AnalyzeRepository
-
-        repo = AnalyzeRepository(db)
-        analysis = repo.create_analysis(
-            tender_id=tender_id,
-            user_id=current_user.id,
-            analysis_type="full",
-            include_rfp_analysis=True,
-        )
-
         service = RFPExtractionService()
 
         rfp_response = service.extract_rfp_sections(
-            db=db,
-            analysis_id=analysis.id,
             tender_id=tender_id,
             section_number=section_number,
             include_compliance=include_compliance,
@@ -473,21 +448,9 @@ def get_scope_of_work(
     - `404 Not Found` - Tender not found
     """
     try:
-        from app.modules.tenderiq.db.repository import AnalyzeRepository
-
-        repo = AnalyzeRepository(db)
-        analysis = repo.create_analysis(
-            tender_id=tender_id,
-            user_id=current_user.id,
-            analysis_type="full",
-            include_scope_of_work=True,
-        )
-
         service = ScopeExtractionService()
 
         scope_response = service.extract_scope(
-            db=db,
-            analysis_id=analysis.id,
             tender_id=tender_id,
         )
 
@@ -548,20 +511,9 @@ def generate_one_pager(
     - `503 Service Unavailable` - Generation service unavailable
     """
     try:
-        from app.modules.tenderiq.db.repository import AnalyzeRepository
-
-        repo = AnalyzeRepository(db)
-        analysis = repo.create_analysis(
-            tender_id=tender_id,
-            user_id=current_user.id,
-            analysis_type="summary",
-        )
-
         service = ReportGenerationService()
 
         one_pager = service.generate_one_pager(
-            db=db,
-            analysis_id=analysis.id,
             tender_id=tender_id,
             format=request.format,
             include_risk_assessment=request.include_risk_assessment,

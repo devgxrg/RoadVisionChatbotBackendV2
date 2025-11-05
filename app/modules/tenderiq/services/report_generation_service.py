@@ -30,8 +30,6 @@ class ReportGenerationService:
 
     def generate_one_pager(
         self,
-        db: Session,
-        analysis_id: UUID,
         tender_id: UUID,
         format: str = "markdown",
         include_risk_assessment: bool = True,
@@ -43,8 +41,6 @@ class ReportGenerationService:
         Generate a one-page executive summary of the analysis.
 
         Args:
-            db: Database session
-            analysis_id: Analysis record ID
             tender_id: Tender ID
             format: Output format: "markdown", "html", or "pdf"
             include_risk_assessment: Include risk summary
@@ -55,8 +51,6 @@ class ReportGenerationService:
         Returns:
             OnePagerResponse with generated document
         """
-        repo = AnalyzeRepository(db)
-
         # TODO: Fetch analysis results from repo
         # TODO: Fetch tender data from ScrapedTender table
         # For now, generate sample one-pager

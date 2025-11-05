@@ -5,7 +5,7 @@ Analyzes tender documents for risks and generates risk reports.
 """
 
 from typing import List, Optional, Tuple
-from uuid import UUID
+from uuid import UUID, uuid4
 from datetime import datetime
 from sqlalchemy.orm import Session
 
@@ -25,8 +25,6 @@ class RiskAssessmentService:
 
     def assess_risks(
         self,
-        db: Session,
-        analysis_id: UUID,
         tender_id: UUID,
         depth: str = "summary",
         include_historical: bool = False,
@@ -35,8 +33,6 @@ class RiskAssessmentService:
         Perform risk assessment on a tender.
 
         Args:
-            db: Database session
-            analysis_id: Analysis record ID
             tender_id: Tender to assess
             depth: "summary" or "detailed"
             include_historical: Include historical risk data
@@ -44,12 +40,6 @@ class RiskAssessmentService:
         Returns:
             RiskAssessmentResponse with identified risks
         """
-        repo = AnalyzeRepository(db)
-
-        # TODO: Fetch tender documents from ScrapedTender
-        # TODO: Extract text from documents
-        # TODO: Analyze text for risks using LLM
-
         # For now, sample risk data to demonstrate structure
         sample_risks = [
             {
@@ -75,48 +65,35 @@ class RiskAssessmentService:
             },
         ]
 
-        # Create risk records in database
-        created_risks = []
+        # Build response directly without database interaction
+        risk_details = []
         for risk_data in sample_risks:
-            risk = repo.create_risk(
-                analysis_id=analysis_id,
-                level=self._determine_risk_level(risk_data["impact"], risk_data["likelihood"]),
-                category=self.categorize_risk(risk_data["description"]),
-                title=risk_data["title"],
-                description=risk_data["description"],
-                impact=risk_data["impact"],
-                likelihood=risk_data["likelihood"],
-                mitigation_strategy=self.generate_mitigations(risk_data["description"]),
-                recommended_action=self._get_recommended_action(risk_data["title"]),
+            level = self._determine_risk_level(risk_data["impact"], risk_data["likelihood"])
+            category = self.categorize_risk(risk_data["description"])
+            risk_details.append(
+                RiskDetailResponse(
+                    id=uuid4(),
+                    level=level,
+                    category=category,
+                    title=risk_data["title"],
+                    description=risk_data["description"],
+                    impact=risk_data["impact"],
+                    likelihood=risk_data["likelihood"],
+                    mitigation_strategy=self.generate_mitigations(risk_data["description"]),
+                    recommended_action=self._get_recommended_action(risk_data["title"]),
+                    related_documents=[],
+                )
             )
-            created_risks.append(risk)
 
         # Calculate overall risk score
-        risk_score = self.calculate_risk_score([r.__dict__ for r in created_risks])
+        risk_score = self.calculate_risk_score([r.model_dump() for r in risk_details])
         overall_level = self._score_to_level(risk_score)
-
-        # Build response
-        risk_details = [
-            RiskDetailResponse(
-                id=r.id,
-                level=r.level.value,
-                category=r.category.value,
-                title=r.title,
-                description=r.description,
-                impact=r.impact,
-                likelihood=r.likelihood,
-                mitigation_strategy=r.mitigation_strategy,
-                recommended_action=r.recommended_action,
-                related_documents=r.related_documents,
-            )
-            for r in created_risks
-        ]
 
         return RiskAssessmentResponse(
             tender_id=tender_id,
             overall_risk_level=overall_level,
             risk_score=risk_score,
-            executive_summary=self._generate_executive_summary(created_risks, risk_score),
+            executive_summary=self._generate_executive_summary(risk_details, risk_score),
             risks=risk_details,
             analyzed_at=datetime.utcnow(),
         )

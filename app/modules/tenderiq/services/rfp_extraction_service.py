@@ -5,7 +5,7 @@ Extracts and analyzes RFP (Request for Proposal) sections from tender documents.
 """
 
 from typing import List, Optional
-from uuid import UUID
+from uuid import UUID, uuid4
 from datetime import datetime
 from sqlalchemy.orm import Session
 
@@ -26,8 +26,6 @@ class RFPExtractionService:
 
     def extract_rfp_sections(
         self,
-        db: Session,
-        analysis_id: UUID,
         tender_id: UUID,
         section_number: Optional[str] = None,
         include_compliance: bool = False,
@@ -36,8 +34,6 @@ class RFPExtractionService:
         Extract RFP sections from tender documents.
 
         Args:
-            db: Database session
-            analysis_id: Analysis record ID
             tender_id: Tender to analyze
             section_number: Optional specific section to retrieve
             include_compliance: Include compliance assessment
@@ -45,11 +41,6 @@ class RFPExtractionService:
         Returns:
             RFPAnalysisResponse with extracted sections
         """
-        repo = AnalyzeRepository(db)
-
-        # TODO: Fetch tender documents from ScrapedTender
-        # TODO: Parse documents and extract RFP sections using LLM
-
         # Sample RFP sections for demonstration
         sample_sections = [
             {
@@ -91,67 +82,43 @@ class RFPExtractionService:
             },
         ]
 
-        # Create RFP section records
-        created_sections = []
+        # Build response directly without database interaction
+        section_responses = []
         criticality_counts = {"high": 0, "medium": 0, "low": 0}
+        total_requirements = 0
 
         for section_data in sample_sections:
-            # Determine criticality
-            if section_data["complexity"] == "high":
-                criticality = "high"
-                criticality_counts["high"] += 1
-            elif section_data["complexity"] == "medium":
-                criticality = "medium"
-                criticality_counts["medium"] += 1
-            else:
-                criticality = "low"
-                criticality_counts["low"] += 1
-
-            section = repo.create_rfp_section(
-                analysis_id=analysis_id,
-                section_number=section_data["number"],
-                title=section_data["title"],
-                description=section_data["description"],
-                key_requirements=section_data["requirements"],
-                estimated_complexity=section_data["complexity"],
-                compliance_status="requires-review" if include_compliance else None,
-                related_sections=self._find_related_sections(section_data["number"]),
-                document_references=[],
-            )
-            created_sections.append(section)
-
-        # Build response
-        section_responses = []
-        for section in created_sections:
-            # Only include requested section if specified
-            if section_number and section.section_number != section_number:
+            if section_number and section_data["number"] != section_number:
                 continue
+
+            complexity = section_data["complexity"]
+            criticality_counts[complexity] += 1
+            total_requirements += len(section_data["requirements"])
 
             compliance = None
             if include_compliance:
                 compliance = RFPSectionComplianceResponse(
-                    status=section.compliance_status or "requires-review",
-                    issues=section.compliance_issues,
+                    status="requires-review",
+                    issues=[],
                 )
 
             section_responses.append(
                 RFPSectionResponse(
-                    id=section.id,
-                    number=section.section_number,
-                    title=section.title,
-                    description=section.description,
-                    key_requirements=section.key_requirements,
+                    id=uuid4(),
+                    number=section_data["number"],
+                    title=section_data["title"],
+                    description=section_data["description"],
+                    key_requirements=section_data["requirements"],
                     compliance=compliance,
-                    estimated_complexity=section.estimated_complexity,
-                    related_sections=section.related_sections,
+                    estimated_complexity=complexity,
+                    related_sections=self._find_related_sections(section_data["number"]),
+                    document_references=[],
                 )
             )
 
-        total_requirements = sum(len(s.key_requirements) for s in created_sections)
-
         return RFPAnalysisResponse(
             tender_id=tender_id,
-            total_sections=len(created_sections),
+            total_sections=len(section_responses),
             sections=section_responses,
             summary=RFPSectionSummaryResponse(
                 total_requirements=total_requirements,
