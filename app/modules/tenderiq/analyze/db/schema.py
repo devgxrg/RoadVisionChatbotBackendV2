@@ -79,6 +79,8 @@ class TenderAnalysis(Base):
     results = relationship("AnalysisResults", back_populates="analysis", uselist=False, cascade="all, delete-orphan")
     risks = relationship("AnalysisRisk", back_populates="analysis", cascade="all, delete-orphan")
     rfp_sections = relationship("AnalysisRFPSection", back_populates="analysis", cascade="all, delete-orphan")
+    extracted_content = relationship("TenderExtractedContent", back_populates="analysis", uselist=False, cascade="all, delete-orphan")
+    quality_metrics = relationship("ExtractionQualityMetrics", back_populates="analysis", uselist=False, cascade="all, delete-orphan")
 
 
 class AnalysisResults(Base):
@@ -218,7 +220,7 @@ class TenderExtractedContent(Base):
     extraction_completed_at = Column(DateTime, nullable=True)
 
     # Relationships
-    analysis = relationship("TenderAnalysis", cascade="all, delete-orphan")
+    analysis = relationship("TenderAnalysis", back_populates="extracted_content")
 
 
 class ExtractionQualityMetrics(Base):
@@ -261,4 +263,4 @@ class ExtractionQualityMetrics(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     # Relationships
-    analysis = relationship("TenderAnalysis", cascade="all, delete-orphan")
+    analysis = relationship("TenderAnalysis", back_populates="quality_metrics")
