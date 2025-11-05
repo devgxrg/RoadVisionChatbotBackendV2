@@ -25,7 +25,7 @@ except ImportError:
     logging.warning("Google Generative AI not available - LLM extraction will be limited")
 
 from sqlalchemy.orm import Session
-from app.modules.tenderiq.db.repository import AnalyzeRepository
+from app.modules.tenderiq.analyze.db.repository import AnalyzeRepository
 from app.modules.tenderiq.analyze.models.structured_extraction_models import (
     TenderInfo,
     FinancialRequirements,
