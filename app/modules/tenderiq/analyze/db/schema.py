@@ -33,7 +33,7 @@ class TenderAnalysis(Base):
     tender_id: Mapped[uuid.UUID] = mapped_column(postgresql.UUID(as_uuid=True), ForeignKey(Tender.id), nullable=False, unique=True, index=True)
     
     # Analysis metadata
-    status: Mapped[AnalysisStatusEnum] = mapped_column(SQLAlchemyEnum(AnalysisStatusEnum), default=AnalysisStatusEnum.pending, nullable=False, index=True)
+    status: Mapped[AnalysisStatusEnum] = mapped_column(postgresql.ENUM(AnalysisStatusEnum, name='analysisstatusenum', create_type=False), default=AnalysisStatusEnum.pending, nullable=False, index=True)
     progress: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     status_message: Mapped[Optional[str]] = mapped_column(String(255))
     error_message: Mapped[Optional[str]] = mapped_column(Text)
