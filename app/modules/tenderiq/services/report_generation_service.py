@@ -5,7 +5,7 @@ Generates one-pagers and data sheets from analysis results.
 """
 
 from typing import Optional, List, Dict, Any
-from uuid import UUID
+from uuid import UUID, uuid4
 from datetime import datetime
 from sqlalchemy.orm import Session
 
