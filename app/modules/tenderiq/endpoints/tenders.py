@@ -7,7 +7,6 @@ from app.db.database import get_db_session
 from app.modules.tenderiq.models.pydantic_models import (
     DailyTendersResponse,
     AvailableDatesResponse,
-    FilteredTendersResponse,
     TenderDetailResponse,
 )
 from app.modules.tenderiq.services import tender_service
@@ -20,10 +19,17 @@ router = APIRouter()
     "/dailytenders",
     response_model=DailyTendersResponse,
     tags=["TenderIQ"],
-    summary="Get the latest daily tenders from the scraper",
+    summary="[DEPRECATED] Get the latest daily tenders - use /tenders instead",
+    deprecated=True,
 )
 def get_daily_tenders(db: Session = Depends(get_db_session)):
     """
+    **DEPRECATED**: Use `GET /tenders` without parameters instead.
+
+    This endpoint has been merged into `/tenders`. Both endpoints now return
+    the same hierarchical format. When calling `/tenders` without any parameters,
+    it returns the latest scrape run (same as this endpoint).
+
     Retrieves the most recent batch of tenders added by the scraper.
     This represents the latest daily scrape run.
     """
@@ -120,11 +126,12 @@ def get_available_dates(db: Session = Depends(get_db_session)):
 
 @router.get(
     "/tenders",
-    response_model=FilteredTendersResponse,
+    response_model=DailyTendersResponse,
     tags=["TenderIQ"],
     summary="Get tenders with date and other filters",
     description="Retrieves tenders filtered by specific date(s) or date ranges, "
-    "with optional additional filters like category, location, and value range.",
+    "with optional additional filters like category, location, and value range. "
+    "Returns data in the same hierarchical format as /dailytenders endpoint.",
 )
 def get_filtered_tenders(
     db: Session = Depends(get_db_session),
@@ -178,45 +185,59 @@ def get_filtered_tenders(
     """
     Get tenders with optional filtering by date and other criteria.
 
+    Returns tenders in a hierarchical format organized by scrape run and query category.
+
+    **Default behavior (no parameters)**: Returns the latest scrape run with all tenders
+    (equivalent to the deprecated `/dailytenders` endpoint).
+
     The endpoint supports three ways to filter by date (in priority order):
     1. **include_all_dates=true**: Returns all historical tenders
     2. **date=YYYY-MM-DD**: Returns tenders from a specific date
     3. **date_range=last_N_days**: Returns tenders from last N days
+
+    If no date filter is specified, the latest scrape run is returned.
 
     Additional filters (category, location, value) can be applied in combination
     with any date filter.
 
     **Example Requests:**
     ```
-    GET /tenders?date_range=last_5_days
-    GET /tenders?date=2024-11-03&category=Civil
-    GET /tenders?include_all_dates=true&location=Mumbai&min_value=100&max_value=500
+    GET /tenders                                          # Latest scrape run
+    GET /tenders?date_range=last_5_days                   # Latest from last 5 days
+    GET /tenders?date=2024-11-03&category=Civil           # Specific date + category
+    GET /tenders?include_all_dates=true&location=Mumbai   # All tenders from Mumbai
     ```
 
     **Example Response:**
     ```json
     {
-      "tenders": [
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "run_at": "2024-11-03T10:30:00Z",
+      "date_str": "November 3, 2024",
+      "name": "Daily Tender Scrape",
+      "contact": "contact@example.com",
+      "no_of_new_tenders": "12",
+      "company": "Company Name",
+      "queries": [
         {
-          "id": "550e8400-e29b-41d4-a716-446655440000",
-          "tender_id_str": "TEN-2024-001",
-          "tender_name": "Construction of Multi-Story Building",
-          "tender_url": "https://...",
-          "city": "Mumbai",
-          "value": "250 Crore",
-          "due_date": "2024-11-15",
-          "summary": "...",
+          "id": "550e8400-e29b-41d4-a716-446655440001",
           "query_name": "Civil",
-          "tender_type": "Open",
-          "state": "Maharashtra"
+          "number_of_tenders": "12",
+          "tenders": [
+            {
+              "id": "550e8400-e29b-41d4-a716-446655440002",
+              "tender_id_str": "TEN-2024-001",
+              "tender_name": "Construction of Multi-Story Building",
+              "tender_url": "https://...",
+              "city": "Mumbai",
+              "value": "250 Crore",
+              "due_date": "2024-11-15",
+              "summary": "...",
+              "files": [...]
+            }
+          ]
         }
-      ],
-      "total_count": 12,
-      "filtered_by": {
-        "date_range": "last_5_days",
-        "category": "Civil"
-      },
-      "available_dates": ["2024-11-03", "2024-11-02", "2024-11-01", ...]
+      ]
     }
     ```
     """
@@ -266,11 +287,10 @@ def get_filtered_tenders(
                 max_value=max_value,
             )
         else:
-            # Default: return latest scrape (like dailytenders but with structured response)
+            # Default: return latest scrape (same as /dailytenders)
             print("📅 No date filter specified, returning latest scrape")
-            return service.get_tenders_by_date_range(
+            return service.get_latest_tenders(
                 db,
-                date_range="last_1_day",
                 category=category,
                 location=location,
                 state=state,

@@ -88,7 +88,48 @@ class TenderIQRepository:
             # Filter by tender_release_date, not run_at
             query = query.filter(ScrapeRun.tender_release_date >= cutoff_date.date())
 
-        return query.order_by(ScrapeRun.tender_release_date.desc()).all()
+        return query.order_by(ScrapeRun.tender_release_date.desc()).options(
+            joinedload(ScrapeRun.queries).joinedload(ScrapedTenderQuery.tenders)
+        ).all()
+
+    def get_scrape_runs_by_specific_date(
+        self, date: str  # Format: "YYYY-MM-DD"
+    ) -> list[ScrapeRun]:
+        """
+        Get scrape run(s) for a specific date based on tender_release_date.
+
+        Uses tender_release_date (when tenders were released from website header),
+        not run_at (when we scraped them).
+
+        Args:
+            date: Date string in format "YYYY-MM-DD"
+
+        Returns:
+            List of ScrapeRun objects with all relationships loaded
+
+        Raises:
+            ValueError: If date format is invalid
+
+        Example:
+            get_scrape_runs_by_specific_date("2024-11-03")
+        """
+        try:
+            from datetime import date as date_type
+            target_date = datetime.strptime(date, "%Y-%m-%d").date()
+        except ValueError as e:
+            raise ValueError(
+                f"Invalid date format. Expected YYYY-MM-DD, got '{date}'"
+            ) from e
+
+        return (
+            self.db.query(ScrapeRun)
+            .filter(ScrapeRun.tender_release_date == target_date)
+            .order_by(ScrapeRun.tender_release_date.desc())
+            .options(
+                joinedload(ScrapeRun.queries).joinedload(ScrapedTenderQuery.tenders)
+            )
+            .all()
+        )
 
     def get_tenders_by_scrape_run(
         self,

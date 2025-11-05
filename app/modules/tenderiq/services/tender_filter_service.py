@@ -25,6 +25,8 @@ from app.modules.tenderiq.models.pydantic_models import (
     TenderNoticeInfo,
     TenderKeyDatesInfo,
     TenderContactInfo,
+    DailyTendersResponse,
+    ScrapedTenderQuery,
 )
 
 
@@ -90,6 +92,54 @@ class TenderFilterService:
 
         return AvailableDatesResponse(dates=dates_info)
 
+    def get_latest_tenders(
+        self,
+        db: Session,
+        category: Optional[str] = None,
+        location: Optional[str] = None,
+        state: Optional[str] = None,
+        tender_type: Optional[str] = None,
+        min_value: Optional[float] = None,
+        max_value: Optional[float] = None,
+    ) -> DailyTendersResponse:
+        """
+        Get the latest (most recent) scrape run with optional filters.
+        Returns in DailyTendersResponse format (hierarchical by scrape run and query).
+
+        This is the default behavior when /tenders is called without parameters,
+        matching the behavior of /dailytenders.
+
+        Args:
+            db: SQLAlchemy database session
+            category: Filter by query_name (category)
+            location: Filter by city
+            min_value: Filter by minimum tender value
+            max_value: Filter by maximum tender value
+
+        Returns:
+            DailyTendersResponse with tenders organized by scrape run and query
+
+        Raises:
+            ValueError: If no scrape runs found
+        """
+        repo = TenderIQRepository(db)
+
+        # Get the latest scrape run
+        scrape_runs = repo.get_scrape_runs_by_date_range(days=None)
+
+        if scrape_runs:
+            return self._scrape_run_to_daily_response(
+                scrape_runs[0],
+                category=category,
+                location=location,
+                state=state,
+                tender_type=tender_type,
+                min_value=min_value,
+                max_value=max_value,
+            )
+
+        raise ValueError("No tenders found in the database")
+
     def get_tenders_by_date_range(
         self,
         db: Session,
@@ -100,9 +150,10 @@ class TenderFilterService:
         tender_type: Optional[str] = None,
         min_value: Optional[float] = None,
         max_value: Optional[float] = None,
-    ) -> FilteredTendersResponse:
+    ) -> DailyTendersResponse:
         """
         Get tenders from a relative date range (e.g., "last 5 days").
+        Returns in DailyTendersResponse format (hierarchical by scrape run and query).
 
         Args:
             db: SQLAlchemy database session
@@ -113,7 +164,7 @@ class TenderFilterService:
             max_value: Filter by maximum tender value
 
         Returns:
-            FilteredTendersResponse with tenders and metadata
+            DailyTendersResponse with tenders organized by scrape run and query
 
         Raises:
             ValueError: If invalid date_range is provided
@@ -135,13 +186,14 @@ class TenderFilterService:
         days = range_to_days[date_range]
         repo = TenderIQRepository(db)
 
-        # Get all tenders from scrape runs in the date range
-        all_tenders = []
+        # Get scrape runs and organize by hierarchical structure
         scrape_runs = repo.get_scrape_runs_by_date_range(days=days)
 
-        for scrape_run in scrape_runs:
-            tenders = repo.get_tenders_by_scrape_run(
-                scrape_run.id,
+        # Return the latest scrape run in the range (or combine if needed)
+        # For now, return the first (latest) one with all filters applied
+        if scrape_runs:
+            return self._scrape_run_to_daily_response(
+                scrape_runs[0],
                 category=category,
                 location=location,
                 state=state,
@@ -149,36 +201,9 @@ class TenderFilterService:
                 min_value=min_value,
                 max_value=max_value,
             )
-            all_tenders.extend(tenders)
 
-        # Build response
-        available_dates = self._get_available_dates_list(db)
-        filtered_by = {
-            "date_range": date_range,
-        }
-        if category:
-            filtered_by["category"] = category
-        if location:
-            filtered_by["location"] = location
-        if state:
-            filtered_by["state"] = state
-        if tender_type:
-            filtered_by["tender_type"] = tender_type
-        if state:
-            filtered_by["state"] = state
-        if tender_type:
-            filtered_by["tender_type"] = tender_type
-        if state:
-            filtered_by["state"] = state
-        if tender_type:
-            filtered_by["tender_type"] = tender_type
-
-        return FilteredTendersResponse(
-            tenders=[self._tender_to_response(t) for t in all_tenders],
-            total_count=len(all_tenders),
-            filtered_by=filtered_by,
-            available_dates=available_dates,
-        )
+        # Return empty response if no scrape runs found
+        raise ValueError(f"No tenders found for date range: {date_range}")
 
     def get_tenders_by_specific_date(
         self,
@@ -190,9 +215,10 @@ class TenderFilterService:
         tender_type: Optional[str] = None,
         min_value: Optional[float] = None,
         max_value: Optional[float] = None,
-    ) -> FilteredTendersResponse:
+    ) -> DailyTendersResponse:
         """
         Get tenders from a specific date.
+        Returns in DailyTendersResponse format (hierarchical by scrape run and query).
 
         Args:
             db: SQLAlchemy database session
@@ -203,16 +229,19 @@ class TenderFilterService:
             max_value: Filter by maximum tender value
 
         Returns:
-            FilteredTendersResponse with tenders from that date
+            DailyTendersResponse with tenders from that date
 
         Raises:
             ValueError: If date format is invalid
         """
         repo = TenderIQRepository(db)
 
-        try:
-            tenders = repo.get_tenders_by_specific_date(
-                date=date,
+        # Get scrape run for the specific date
+        scrape_runs = repo.get_scrape_runs_by_specific_date(date)
+
+        if scrape_runs:
+            return self._scrape_run_to_daily_response(
+                scrape_runs[0],
                 category=category,
                 location=location,
                 state=state,
@@ -220,25 +249,8 @@ class TenderFilterService:
                 min_value=min_value,
                 max_value=max_value,
             )
-        except ValueError as e:
-            raise ValueError(f"Invalid date: {str(e)}")
 
-        # Build response
-        available_dates = self._get_available_dates_list(db)
-        filtered_by = {
-            "date": date,
-        }
-        if category:
-            filtered_by["category"] = category
-        if location:
-            filtered_by["location"] = location
-
-        return FilteredTendersResponse(
-            tenders=[self._tender_to_response(t) for t in tenders],
-            total_count=len(tenders),
-            filtered_by=filtered_by,
-            available_dates=available_dates,
-        )
+        raise ValueError(f"No tenders found for date: {date}")
 
     def get_all_tenders(
         self,
@@ -249,9 +261,10 @@ class TenderFilterService:
         tender_type: Optional[str] = None,
         min_value: Optional[float] = None,
         max_value: Optional[float] = None,
-    ) -> FilteredTendersResponse:
+    ) -> DailyTendersResponse:
         """
         Get all historical tenders with optional filters.
+        Returns in DailyTendersResponse format (hierarchical by scrape run and query).
 
         Args:
             db: SQLAlchemy database session
@@ -261,35 +274,26 @@ class TenderFilterService:
             max_value: Filter by maximum tender value
 
         Returns:
-            FilteredTendersResponse with all tenders
+            DailyTendersResponse with all tenders
         """
         repo = TenderIQRepository(db)
 
-        tenders = repo.get_all_tenders_with_filters(
-            category=category,
-            location=location,
-            state=state,
-            tender_type=tender_type,
-            min_value=min_value,
-            max_value=max_value,
-        )
+        # Get all scrape runs
+        scrape_runs = repo.get_scrape_runs_by_date_range(days=None)
 
-        # Build response
-        available_dates = self._get_available_dates_list(db)
-        filtered_by = {
-            "include_all_dates": True,
-        }
-        if category:
-            filtered_by["category"] = category
-        if location:
-            filtered_by["location"] = location
+        # Return the latest scrape run with filters applied
+        if scrape_runs:
+            return self._scrape_run_to_daily_response(
+                scrape_runs[0],
+                category=category,
+                location=location,
+                state=state,
+                tender_type=tender_type,
+                min_value=min_value,
+                max_value=max_value,
+            )
 
-        return FilteredTendersResponse(
-            tenders=[self._tender_to_response(t) for t in tenders],
-            total_count=len(tenders),
-            filtered_by=filtered_by,
-            available_dates=available_dates,
-        )
+        raise ValueError("No tenders found in the database")
 
     # ==================== Helper Methods ====================
 
@@ -403,3 +407,161 @@ class TenderFilterService:
             return True
         except ValueError:
             return False
+
+    def _scrape_run_to_daily_response(
+        self,
+        scrape_run,
+        category: Optional[str] = None,
+        location: Optional[str] = None,
+        state: Optional[str] = None,
+        tender_type: Optional[str] = None,
+        min_value: Optional[float] = None,
+        max_value: Optional[float] = None,
+    ) -> DailyTendersResponse:
+        """
+        Convert a scrape run ORM object to DailyTendersResponse format.
+        Applies optional filters to the tenders within each query.
+
+        Args:
+            scrape_run: ScrapeRun ORM object with queries and tenders loaded
+            category: Filter by query_name
+            location: Filter by city
+            state: Filter by state
+            tender_type: Filter by tender type
+            min_value: Filter by minimum tender value (crore)
+            max_value: Filter by maximum tender value (crore)
+
+        Returns:
+            DailyTendersResponse with hierarchical structure
+        """
+        # Filter and convert queries
+        filtered_queries = []
+
+        for query in scrape_run.queries:
+            # Skip if category filter is specified and doesn't match
+            if category and query.query_name.lower() != category.lower():
+                continue
+
+            # Filter tenders in this query
+            filtered_tenders = self._filter_tenders(
+                query.tenders,
+                location=location,
+                state=state,
+                tender_type=tender_type,
+                min_value=min_value,
+                max_value=max_value,
+            )
+
+            # Only include query if it has matching tenders
+            if filtered_tenders:
+                filtered_queries.append({
+                    "id": query.id,
+                    "query_name": query.query_name,
+                    "number_of_tenders": str(len(filtered_tenders)),
+                    "tenders": filtered_tenders,
+                })
+
+        # Create DailyTendersResponse from scrape run
+        return DailyTendersResponse(
+            id=scrape_run.id,
+            run_at=scrape_run.run_at,
+            date_str=scrape_run.date_str,
+            name=scrape_run.name,
+            contact=scrape_run.contact,
+            no_of_new_tenders=str(
+                sum(len(q["tenders"]) for q in filtered_queries)
+            ),
+            company=scrape_run.company,
+            queries=[ScrapedTenderQuery(**q) for q in filtered_queries],
+        )
+
+    def _filter_tenders(
+        self,
+        tenders,
+        location: Optional[str] = None,
+        state: Optional[str] = None,
+        tender_type: Optional[str] = None,
+        min_value: Optional[float] = None,
+        max_value: Optional[float] = None,
+    ) -> list:
+        """
+        Filter a list of tenders based on criteria.
+
+        Args:
+            tenders: List of ScrapedTender ORM objects
+            location: Filter by city
+            state: Filter by state
+            tender_type: Filter by tender type
+            min_value: Filter by minimum tender value (crore)
+            max_value: Filter by maximum tender value (crore)
+
+        Returns:
+            Filtered list of ScrapedTender objects
+        """
+        filtered = []
+
+        for tender in tenders:
+            # Location filter
+            if location and tender.city.lower() != location.lower():
+                continue
+
+            # State filter
+            if state and tender.state and tender.state.lower() != state.lower():
+                continue
+
+            # Tender type filter
+            if tender_type and tender.tender_type and tender.tender_type.lower() != tender_type.lower():
+                continue
+
+            # Value range filters
+            if min_value is not None or max_value is not None:
+                # Parse tender value if available
+                try:
+                    tender_val = self._parse_tender_value(tender.value)
+                    if min_value is not None and tender_val < min_value:
+                        continue
+                    if max_value is not None and tender_val > max_value:
+                        continue
+                except (ValueError, TypeError):
+                    # If value can't be parsed, skip value filter
+                    pass
+
+            filtered.append(tender)
+
+        return filtered
+
+    def _parse_tender_value(self, value_str: str) -> float:
+        """
+        Parse tender value string to float (in crore).
+
+        Handles formats like:
+        - "250 Crore"
+        - "100 Lakh"
+        - "50000000"
+
+        Args:
+            value_str: Tender value string
+
+        Returns:
+            Value in crore as float
+
+        Raises:
+            ValueError: If value cannot be parsed
+        """
+        if not value_str:
+            raise ValueError("Empty value string")
+
+        value_str = value_str.strip().lower()
+
+        # Handle crore
+        if "crore" in value_str:
+            num_str = value_str.replace("crore", "").strip()
+            return float(num_str)
+
+        # Handle lakh (convert to crore)
+        if "lakh" in value_str:
+            num_str = value_str.replace("lakh", "").strip()
+            return float(num_str) / 100.0
+
+        # Try parsing as raw number
+        return float(value_str) / 10000000.0  # Convert to crore
