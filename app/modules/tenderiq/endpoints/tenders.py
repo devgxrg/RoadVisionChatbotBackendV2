@@ -7,7 +7,8 @@ from app.db.database import get_db_session
 from app.modules.tenderiq.models.pydantic_models import (
     DailyTendersResponse,
     AvailableDatesResponse,
-    TenderDetailResponse,
+    Tender,
+    FilteredTendersResponse,
 )
 from app.modules.tenderiq.services import tender_service
 from app.modules.tenderiq.services.tender_filter_service import TenderFilterService
@@ -44,7 +45,7 @@ def get_daily_tenders(db: Session = Depends(get_db_session)):
 
 @router.get(
     "/tenders/{tender_id}",
-    response_model=TenderDetailResponse,
+    response_model=Tender,
     tags=["TenderIQ"],
     summary="Get detailed information for a single tender",
 )

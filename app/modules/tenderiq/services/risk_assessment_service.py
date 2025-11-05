@@ -9,9 +9,9 @@ from uuid import UUID
 from datetime import datetime
 from sqlalchemy.orm import Session
 
-from app.modules.tenderiq.analyze.db.repository import AnalyzeRepository
-from app.modules.tenderiq.analyze.db.schema import RiskLevelEnum, RiskCategoryEnum
-from app.modules.tenderiq.analyze.models.pydantic_models import (
+from app.modules.tenderiq.db.repository import AnalyzeRepository
+from app.modules.tenderiq.db.schema import RiskLevelEnum, RiskCategoryEnum
+from app.modules.tenderiq.models.pydantic_models import (
     RiskAssessmentResponse,
     RiskDetailResponse,
 )

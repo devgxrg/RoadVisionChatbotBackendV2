@@ -14,9 +14,9 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 import threading
 
-from app.modules.tenderiq.analyze.db.repository import AnalyzeRepository
-from app.modules.tenderiq.analyze.db.schema import AnalysisStatusEnum
-from app.modules.tenderiq.analyze.models.pydantic_models import (
+from app.modules.tenderiq.db.repository import AnalyzeRepository
+from app.modules.tenderiq.db.schema import AnalysisStatusEnum
+from app.modules.tenderiq.models.pydantic_models import (
     AnalysisInitiatedResponse,
     AnalysisStatusResponse,
     AnalysisResultsResponse,
@@ -267,7 +267,7 @@ class AnalysisService:
             analysis_id: Analysis ID to process
         """
         # Import here to avoid circular imports
-        from app.modules.tenderiq.analyze.tasks import process_analysis_sync
+        from app.modules.tenderiq.tasks import process_analysis_sync
 
         # Run in background thread
         # In production, this should be a proper task queue (Celery, RQ, etc)

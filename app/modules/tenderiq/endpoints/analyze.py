@@ -1,7 +1,7 @@
 """
 API Endpoints for TenderIQ Analyze module.
 
-Implements all 10 analyze endpoints for tender document analysis.
+Implements all 12 analyze endpoints for tender document analysis.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
@@ -11,7 +11,7 @@ from uuid import UUID
 
 from app.db.database import get_db_session
 from app.modules.auth.services.auth_service import get_current_active_user
-from app.modules.tenderiq.analyze.models.pydantic_models import (
+from app.modules.tenderiq.models.pydantic_models import (
     AnalyzeTenderRequest,
     GenerateOnePagerRequest,
     AnalysisInitiatedResponse,
@@ -25,12 +25,12 @@ from app.modules.tenderiq.analyze.models.pydantic_models import (
     AnalysesListResponse,
     DeleteAnalysisResponse,
 )
-from app.modules.tenderiq.analyze.services.analysis_service import AnalysisService
-from app.modules.tenderiq.analyze.services.risk_assessment_service import RiskAssessmentService
-from app.modules.tenderiq.analyze.services.rfp_extraction_service import RFPExtractionService
-from app.modules.tenderiq.analyze.services.scope_extraction_service import ScopeExtractionService
-from app.modules.tenderiq.analyze.services.report_generation_service import ReportGenerationService
-from app.modules.tenderiq.analyze.services.quality_indicators import QualityIndicatorsService
+from app.modules.tenderiq.services.analysis_service import AnalysisService
+from app.modules.tenderiq.services.risk_assessment_service import RiskAssessmentService
+from app.modules.tenderiq.services.rfp_extraction_service import RFPExtractionService
+from app.modules.tenderiq.services.scope_extraction_service import ScopeExtractionService
+from app.modules.tenderiq.services.report_generation_service import ReportGenerationService
+from app.modules.tenderiq.services.quality_indicators import QualityIndicatorsService
 
 router = APIRouter()
 
@@ -59,8 +59,8 @@ def initiate_analysis(
     **Request:**
     ```json
     {
-      "documentIds": ["uuid"],  // Optional: specific documents to analyze
-      "analysisType": "full|summary|risk-only",  // Optional
+      "documentIds": ["uuid"],  # Optional: specific documents to analyze
+      "analysisType": "full|summary|risk-only",  # Optional
       "includeRiskAssessment": true,
       "includeRfpAnalysis": true,
       "includeScopeOfWork": true
@@ -302,7 +302,7 @@ def get_risk_assessment(
     try:
         # For now, create a temporary analysis record for this request
         # TODO: Check for existing analysis or create new one
-        from app.modules.tenderiq.analyze.db.repository import AnalyzeRepository
+        from app.modules.tenderiq.db.repository import AnalyzeRepository
 
         repo = AnalyzeRepository(db)
         analysis = repo.create_analysis(
@@ -387,7 +387,7 @@ def get_rfp_sections(
     - `404 Not Found` - Tender not found
     """
     try:
-        from app.modules.tenderiq.analyze.db.repository import AnalyzeRepository
+        from app.modules.tenderiq.db.repository import AnalyzeRepository
 
         repo = AnalyzeRepository(db)
         analysis = repo.create_analysis(
@@ -473,7 +473,7 @@ def get_scope_of_work(
     - `404 Not Found` - Tender not found
     """
     try:
-        from app.modules.tenderiq.analyze.db.repository import AnalyzeRepository
+        from app.modules.tenderiq.db.repository import AnalyzeRepository
 
         repo = AnalyzeRepository(db)
         analysis = repo.create_analysis(
@@ -548,7 +548,7 @@ def generate_one_pager(
     - `503 Service Unavailable` - Generation service unavailable
     """
     try:
-        from app.modules.tenderiq.analyze.db.repository import AnalyzeRepository
+        from app.modules.tenderiq.db.repository import AnalyzeRepository
 
         repo = AnalyzeRepository(db)
         analysis = repo.create_analysis(
