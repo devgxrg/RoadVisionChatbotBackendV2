@@ -7,6 +7,7 @@ interacting with the `tenders` table and related entities.
 
 from typing import Optional
 from uuid import UUID
+from datetime import datetime
 from sqlalchemy.orm import Session
 
 from app.modules.tenderiq.db.schema import Tender, TenderActionHistory, TenderActionEnum
