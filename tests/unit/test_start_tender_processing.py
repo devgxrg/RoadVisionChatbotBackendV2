@@ -41,7 +41,7 @@ def test_tender_processing(tender_url: str):
             print(f"❌ Verification failed: ScrapedTender with id '{tender_id_str}' not found in 'scraped_tenders' table.")
             return
 
-        analysis = analyze_repo.get_by_tender_id(scraped_tender.id)
+        analysis = analyze_repo.get_by_tender_id(tender_id_str)
         
         if analysis:
             print("✅ Verification successful! Found analysis record in the database.")

@@ -30,8 +30,8 @@ class TenderAnalysis(Base):
     __tablename__ = 'tender_analysis'
     id: Mapped[uuid.UUID] = mapped_column(postgresql.UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     
-    # One-to-one relationship to the ScrapedTender being analyzed. This refers to scraped_tenders.id.
-    tender_id: Mapped[uuid.UUID] = mapped_column(postgresql.UUID(as_uuid=True), nullable=False, unique=True, index=True)
+    # One-to-one relationship to the ScrapedTender being analyzed. This refers to scraped_tenders.tender_id_str.
+    tender_id: Mapped[str] = mapped_column(String, nullable=False, unique=True, index=True)
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey(User.id), nullable=False, index=True)
     chat_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey(Chat.id))
     
@@ -62,7 +62,7 @@ class TenderAnalysis(Base):
         """Converts the SQLAlchemy model instance to a dictionary."""
         return {
             "id": str(self.id),
-            "tender_id": str(self.tender_id),
+            "tender_id": self.tender_id,
             "user_id": str(self.user_id),
             "chat_id": str(self.chat_id) if self.chat_id else None,
             "status": self.status.value if self.status else None,

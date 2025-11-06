@@ -11,7 +11,7 @@ class AnalyzeRepository:
     def __init__(self, db: Session):
         self.db = db
 
-    def get_by_tender_id(self, tender_id: UUID) -> Optional[TenderAnalysis]:
+    def get_by_tender_id(self, tender_id: str) -> Optional[TenderAnalysis]:
         """
         Retrieves a tender analysis record by the tender_id,
         eagerly loading related data.
@@ -30,7 +30,7 @@ class AnalyzeRepository:
         """Retrieves a tender analysis record by its own ID."""
         return self.db.query(TenderAnalysis).filter_by(id=analysis_id).first()
 
-    def create_for_tender(self, tender_id: UUID, user_id: UUID) -> TenderAnalysis:
+    def create_for_tender(self, tender_id: str, user_id: UUID) -> TenderAnalysis:
         """
         Creates a new, pending tender analysis record for a given tender.
         """

@@ -9,7 +9,6 @@ from app.modules.scraper.data_models import TenderDetailPage
 from app.core.services import vector_store, pdf_processor, weaviate_client, excel_processor, llm_model
 from app.core.global_stores import upload_jobs
 from app.db.database import SessionLocal
-from app.modules.scraper.db.schema import ScrapedTender
 from app.modules.tenderiq.analyze.db.repository import AnalyzeRepository
 from app.modules.tenderiq.analyze.db.schema import AnalysisStatusEnum
 from app.modules.tenderiq.analyze.models.pydantic_models import OnePagerSchema
@@ -142,16 +141,10 @@ ANSWER:"""
                 print(f"  ❌ LLM generation failed: {e}")
                 return f"Error during generation: {e}"
 
-        # a. Get the ScrapedTender record
-        scraped_tender = db.query(ScrapedTender).filter(ScrapedTender.tender_id_str == tender_id).first()
-        if not scraped_tender:
-            print(f"❌ ScrapedTender with ID string {tender_id} not found. Aborting analysis.")
-            return
-
-        # b. Create a TenderAnalysis record
+        # a. Create a TenderAnalysis record
         analyze_repo = AnalyzeRepository(db)
         system_user_id = uuid.UUID('00000000-0000-0000-0000-000000000000') 
-        analysis = analyze_repo.create_for_tender(scraped_tender.id, system_user_id)
+        analysis = analyze_repo.create_for_tender(tender_id, system_user_id)
         
         analyze_repo.update(analysis, {"status": AnalysisStatusEnum.analyzing, "status_message": "Generating One-Pager..."})
 
