@@ -15,7 +15,7 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
-from langchain.memory.buffer import ConversationBufferMemory
+from langchain_community.memory import ConversationBufferMemory
 
 from app.modules.askai.db.repository import ChatRepository
 
