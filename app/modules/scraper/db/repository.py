@@ -3,7 +3,8 @@ from datetime import datetime, timedelta, date as date_type
 
 from sqlalchemy.orm import Session, joinedload
 
-from app.modules.scraper.data_models import HomePageData
+from typing import Tuple, Dict
+from app.modules.scraper.data_models import HomePageData, Tender
 from app.modules.scraper.db.schema import (
     ScrapeRun,
     ScrapedTender,
@@ -33,23 +34,15 @@ class ScraperRepository:
             .first()
         )
 
-    def create_scrape_run(self, homepage_data: HomePageData, tender_release_date: Optional[date_type] = None) -> ScrapeRun:
+    def create_scrape_run_shell(self, homepage_data: HomePageData, tender_release_date: Optional[date_type] = None) -> Tuple[ScrapeRun, Dict[str, ScrapedTenderQuery]]:
         """
-        Creates a new scrape run and all its related entities in the database
-        from the provided Pydantic model.
-
-        Args:
-            homepage_data: The scraped data to save
-            tender_release_date: The date tenders were released (from website header).
-                                If not provided, will be parsed from homepage_data.header.date
+        Creates the main ScrapeRun and its associated query categories in the database,
+        but does NOT add the individual tenders. This sets up the parent records.
         """
         from app.modules.scraper.services.dms_integration_service import _parse_date_to_date_object
 
-        # If tender_release_date not provided, parse it from the header
         if tender_release_date is None:
             tender_release_date = _parse_date_to_date_object(homepage_data.header.date)
-
-        # Fallback to today's date if parsing fails
         if tender_release_date is None:
             tender_release_date = datetime.utcnow().date()
 
@@ -61,91 +54,87 @@ class ScraperRepository:
             no_of_new_tenders=homepage_data.header.no_of_new_tenders,
             company=homepage_data.header.company,
         )
+        self.db.add(scrape_run)
 
+        query_map = {}
         for query_data in homepage_data.query_table:
             scraped_query = ScrapedTenderQuery(
                 query_name=query_data.query_name,
                 number_of_tenders=query_data.number_of_tenders,
             )
             scrape_run.queries.append(scraped_query)
+            query_map[query_data.query_name] = scraped_query
 
-            for tender_data in query_data.tenders:
-                scraped_tender = ScrapedTender(
-                    tender_id_str=tender_data.tender_id,
-                    tender_name=tender_data.tender_name,
-                    tender_url=tender_data.tender_url,
-                    dms_folder_id=tender_data.dms_folder_id,
-                    city=tender_data.city,
-                    summary=tender_data.summary,
-                    value=tender_data.value,
-                    due_date=tender_data.due_date,
-                )
-
-                if tender_data.details:
-                    details = tender_data.details
-                    # Notice
-                    scraped_tender.tdr = details.notice.tdr
-                    scraped_tender.tendering_authority = (
-                        details.notice.tendering_authority
-                    )
-                    scraped_tender.tender_no = details.notice.tender_no
-                    scraped_tender.tender_id_detail = details.notice.tender_id
-                    scraped_tender.tender_brief = details.notice.tender_brief
-                    scraped_tender.state = details.notice.state
-                    scraped_tender.document_fees = details.notice.document_fees
-                    scraped_tender.emd = details.notice.emd
-                    scraped_tender.tender_value = details.notice.tender_value
-                    scraped_tender.tender_type = details.notice.tender_type
-                    scraped_tender.bidding_type = details.notice.bidding_type
-                    scraped_tender.competition_type = details.notice.competition_type
-                    # Details
-                    scraped_tender.tender_details = details.details.tender_details
-                    # Key Dates
-                    scraped_tender.publish_date = details.key_dates.publish_date
-                    scraped_tender.last_date_of_bid_submission = (
-                        details.key_dates.last_date_of_bid_submission
-                    )
-                    scraped_tender.tender_opening_date = (
-                        details.key_dates.tender_opening_date
-                    )
-                    # Contact Information
-                    scraped_tender.company_name = (
-                        details.contact_information.company_name
-                    )
-                    scraped_tender.contact_person = (
-                        details.contact_information.contact_person
-                    )
-                    scraped_tender.address = details.contact_information.address
-                    # Other Detail
-                    scraped_tender.information_source = (
-                        details.other_detail.information_source
-                    )
-
-                    for file_data in details.other_detail.files:
-                        # Generate DMS path for file
-                        # Format: /tenders/YYYY/MM/DD/[tender_id]/files/[filename]
-                        date_str = tender_release_date.strftime("%Y-%m-%d")
-                        year, month, day = date_str.split('-')
-                        safe_filename = self._sanitize_filename(file_data.file_name)
-                        dms_path = f"/tenders/{year}/{month}/{day}/{tender_data.tender_id}/files/{safe_filename}"
-
-                        scraped_file = ScrapedTenderFile(
-                            file_name=file_data.file_name,
-                            file_url=file_data.file_url,
-                            file_description=file_data.file_description,
-                            file_size=file_data.file_size,
-                            dms_path=dms_path,
-                            is_cached=False,  # Files are not downloaded by default
-                            cache_status="pending",  # Ready for background caching
-                        )
-                        scraped_tender.files.append(scraped_file)
-
-                scraped_query.tenders.append(scraped_tender)
-
-        self.db.add(scrape_run)
         self.db.commit()
         self.db.refresh(scrape_run)
-        return scrape_run
+        for query in scrape_run.queries:
+            self.db.refresh(query)
+
+        return scrape_run, query_map
+
+    def add_scraped_tender_details(
+        self, query_orm: ScrapedTenderQuery, tender_data: Tender, tender_release_date: date_type
+    ) -> ScrapedTender:
+        """
+        Creates a single ScrapedTender record with all its details and files,
+        associating it with an existing ScrapedTenderQuery.
+        """
+        scraped_tender = ScrapedTender(
+            tender_id_str=tender_data.tender_id,
+            tender_name=tender_data.tender_name,
+            tender_url=tender_data.tender_url,
+            dms_folder_id=tender_data.dms_folder_id,
+            city=tender_data.city,
+            summary=tender_data.summary,
+            value=tender_data.value,
+            due_date=tender_data.due_date,
+        )
+
+        if tender_data.details:
+            details = tender_data.details
+            scraped_tender.tdr = details.notice.tdr
+            scraped_tender.tendering_authority = details.notice.tendering_authority
+            scraped_tender.tender_no = details.notice.tender_no
+            scraped_tender.tender_id_detail = details.notice.tender_id
+            scraped_tender.tender_brief = details.notice.tender_brief
+            scraped_tender.state = details.notice.state
+            scraped_tender.document_fees = details.notice.document_fees
+            scraped_tender.emd = details.notice.emd
+            scraped_tender.tender_value = details.notice.tender_value
+            scraped_tender.tender_type = details.notice.tender_type
+            scraped_tender.bidding_type = details.notice.bidding_type
+            scraped_tender.competition_type = details.notice.competition_type
+            scraped_tender.tender_details = details.details.tender_details
+            scraped_tender.publish_date = details.key_dates.publish_date
+            scraped_tender.last_date_of_bid_submission = details.key_dates.last_date_of_bid_submission
+            scraped_tender.tender_opening_date = details.key_dates.tender_opening_date
+            scraped_tender.company_name = details.contact_information.company_name
+            scraped_tender.contact_person = details.contact_information.contact_person
+            scraped_tender.address = details.contact_information.address
+            scraped_tender.information_source = details.other_detail.information_source
+
+            for file_data in details.other_detail.files:
+                date_str = tender_release_date.strftime("%Y-%m-%d")
+                year, month, day = date_str.split('-')
+                safe_filename = self._sanitize_filename(file_data.file_name)
+                dms_path = f"/tenders/{year}/{month}/{day}/{tender_data.tender_id}/files/{safe_filename}"
+
+                scraped_file = ScrapedTenderFile(
+                    file_name=file_data.file_name,
+                    file_url=file_data.file_url,
+                    file_description=file_data.file_description,
+                    file_size=file_data.file_size,
+                    dms_path=dms_path,
+                    is_cached=False,
+                    cache_status="pending",
+                )
+                scraped_tender.files.append(scraped_file)
+
+        query_orm.tenders.append(scraped_tender)
+        self.db.add(scraped_tender)
+        self.db.commit()
+        self.db.refresh(scraped_tender)
+        return scraped_tender
 
     def has_email_been_processed(self, email_uid: str, tender_url: str) -> bool:
         """
