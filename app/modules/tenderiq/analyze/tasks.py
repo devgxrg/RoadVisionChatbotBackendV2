@@ -9,6 +9,7 @@ from .db.repository import AnalyzeRepository
 from .events import publish_update
 from .db.schema import AnalysisStatusEnum
 from .services.document_parsing_service import DocumentParsingService
+from app.core.services import pdf_processor, vector_store
 
 async def _run_analysis_async(analysis_id: uuid.UUID):
     """Asynchronous wrapper for the analysis process."""
@@ -23,7 +24,7 @@ async def _run_analysis_async(analysis_id: uuid.UUID):
         repo.update(analysis, {"status": AnalysisStatusEnum.parsing, "progress": 10, "status_message": "Initializing document parsing..."})
         publish_update(analysis_id, "status", {"status": "parsing", "progress": 10, "message": "Initializing document parsing..."})
         
-        parsing_service = DocumentParsingService(db)
+        parsing_service = DocumentParsingService(db=db)
         await parsing_service.parse_documents_for_analysis(analysis_id)
         
         repo.update(analysis, {"progress": 30, "status_message": "Document parsing complete."})
