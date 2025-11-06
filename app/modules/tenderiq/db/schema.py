@@ -43,24 +43,10 @@ class Tender(Base):
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     is_favorite = Column(Boolean, default=False)
     is_archived = Column(Boolean, default=False)
+    is_wishlisted = Column(Boolean, default=False, index=True)
 
-class TenderAnalysis(Base):
-    __tablename__ = 'tender_analysis'
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tender_id = Column(UUID(as_uuid=True), ForeignKey('tenders.id'))
-    executive_summary = Column(Text)
-    eligibility_criteria = Column(JSON)
-    scope_of_work = Column(Text)
-    financial_analysis = Column(JSON)
-    timeline_analysis = Column(JSON)
-    risk_assessment = Column(JSON)
-    compliance_checklist = Column(JSON)
-    key_clauses = Column(JSON)
-    evaluation_criteria = Column(Text)
-    recommendations = Column(Text)
-    win_probability = Column(Float)
-    analyzed_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    analyzed_by_id = Column(UUID(as_uuid=True), ForeignKey('users.id'))
+    history = relationship("TenderActionHistory", back_populates="tender", cascade="all, delete-orphan")
+
 
 class TenderDocument(Base):
     __tablename__ = 'tender_documents'
@@ -100,6 +86,35 @@ class TenderNote(Base):
     parent_note_id = Column(UUID(as_uuid=True), ForeignKey('tender_notes.id'), nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     is_important = Column(Boolean, default=False)
+
+import enum
+
+
+class TenderActionEnum(str, enum.Enum):
+    """Enumeration for user actions on a tender."""
+    viewed = "viewed"
+    wishlisted = "wishlisted"
+    unwishlisted = "unwishlisted"
+    analysis_started = "analysis_started"
+    analysis_completed = "analysis_completed"
+    shortlisted = "shortlisted"
+    accepted = "accepted"
+    rejected = "rejected"
+
+
+class TenderActionHistory(Base):
+    """Logs specific user-driven actions on a tender for history tracking."""
+    __tablename__ = 'tender_action_history'
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tender_id = Column(UUID(as_uuid=True), ForeignKey('tenders.id'), nullable=False, index=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=False, index=True)
+    action = Column(Enum(TenderActionEnum), nullable=False)
+    notes = Column(Text, nullable=True)
+    timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    tender = relationship("Tender", back_populates="history")
+    user = relationship("User")
+
 
 class TenderActivityLog(Base):
     __tablename__ = 'tender_activity_log'

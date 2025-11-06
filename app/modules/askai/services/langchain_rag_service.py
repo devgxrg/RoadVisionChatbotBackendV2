@@ -8,17 +8,21 @@ the manual implementation, using LangChain's declarative chains (LCEL).
 """
 
 from uuid import UUID
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any
+from uuid import UUID
 from sqlalchemy.orm import Session
+from operator import itemgetter
 
 from app.config import settings
 from app.core.langchain_config import get_langchain_llm, get_langchain_embeddings, RAG_PROMPT
 from app.db.vector_store import VectorStoreManager
 from app.modules.askai.db.repository import ChatRepository
-from app.modules.askai.services.langchain_memory import DatabaseConversationMemory
+from app.modules.askai.services.langchain_memory import SQLAlchemyChatMessageHistory
 from app.modules.askai.services.langchain_retriever import create_weaviate_retriever
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnablePassthrough
+from langchain_core.runnables.history import RunnableWithMessageHistory
+from langchain_core.prompts import MessagesPlaceholder, ChatPromptTemplate
 
 
 class LangChainRAGService:
@@ -68,7 +72,6 @@ class LangChainRAGService:
         # Cache chains per chat session
         self._chains = {}
         self._retrievers = {}
-        self._memories = {}
 
     @property
     def llm(self):
@@ -86,43 +89,28 @@ class LangChainRAGService:
 
     def send_message(self, chat_id: UUID, user_message: str) -> Dict[str, Any]:
         """
-        Process message through RAG pipeline.
-
-        Phase 2.3: Full implementation with retrieval and generation.
-
-        Args:
-            chat_id: UUID of the chat session
-            user_message: User's question/message
-
-        Returns:
-            Dict with 'response' and 'sources' keys
-
-        Raises:
-            ValueError: If chat not found
+        Process a message through the RAG pipeline using RunnableWithMessageHistory.
         """
         try:
-            # Verify chat exists
             chat = self.chat_repo.get_by_id(chat_id)
             if not chat:
                 raise ValueError(f"Chat {chat_id} not found")
 
             print(f"✅ Processing message for chat {chat_id}")
 
-            # Get or create memory for this chat
-            memory = self._get_or_create_memory(chat_id)
+            chain_with_history = self._get_or_create_chain(chat_id)
 
-            # Get or create RAG chain for this chat
-            chain = self._get_or_create_chain(chat_id)
-
-            # Invoke the chain with the user message
-            print(f"📝 User message: {user_message}")
-            response_text = chain.invoke({"question": user_message})
+            # Invoke the chain. History is managed automatically.
+            response = chain_with_history.invoke(
+                {"question": user_message},
+                config={"configurable": {"session_id": str(chat_id)}}
+            )
+            response_text = response.content
             print(f"✅ Generated response: {response_text[:100]}...")
 
-            # Retrieve sources for this query
+            # Retrieve sources separately for the response payload
             retriever = self._get_or_create_retriever(chat_id)
             retrieved_docs = retriever.invoke(user_message)
-
             sources = [
                 {
                     "source": doc.metadata.get("source", "Unknown"),
@@ -133,44 +121,13 @@ class LangChainRAGService:
             ]
             print(f"📚 Retrieved {len(sources)} source documents")
 
-            # Save messages to database
-            self.chat_repo.add_message(chat, sender="user", text=user_message)
-            self.chat_repo.add_message(chat, sender="bot", text=response_text)
-            self.db.commit()
-
-            # Update memory
-            memory.add_user_message(user_message)
-            memory.add_ai_message(response_text)
-
-            print(f"✅ Message saved to database")
-
             return {
                 "response": response_text,
                 "sources": sources,
             }
-
         except Exception as e:
             print(f"❌ Error in RAG pipeline: {e}")
             raise
-
-    def _get_or_create_memory(self, chat_id: UUID) -> DatabaseConversationMemory:
-        """
-        Get or create conversation memory for a chat.
-
-        Args:
-            chat_id: Chat session ID
-
-        Returns:
-            DatabaseConversationMemory instance
-        """
-        if chat_id not in self._memories:
-            print(f"📝 Creating memory for chat {chat_id}")
-            self._memories[chat_id] = DatabaseConversationMemory(
-                chat_repo=self.chat_repo,
-                chat_id=chat_id,
-                max_history=settings.RAG_MEMORY_SIZE,
-            )
-        return self._memories[chat_id]
 
     def _get_or_create_retriever(self, chat_id: UUID):
         """
@@ -191,65 +148,54 @@ class LangChainRAGService:
             )
         return self._retrievers[chat_id]
 
-    def _get_or_create_chain(self, chat_id: UUID):
+    def _get_or_create_chain(self, chat_id: UUID) -> RunnableWithMessageHistory:
         """
-        Get or create RAG chain for a chat.
-
-        Args:
-            chat_id: Chat session ID
-
-        Returns:
-            Callable LCEL chain
+        Get or create a history-aware RAG chain for a chat session.
         """
         if chat_id not in self._chains:
-            print(f"🔗 Building RAG chain for chat {chat_id}")
-            self._chains[chat_id] = self._build_chain(chat_id)
+            print(f"🔗 Building RAG chain with history for chat {chat_id}")
+            
+            base_chain = self._build_base_chain(chat_id)
+            
+            chain_with_history = RunnableWithMessageHistory(
+                runnable=base_chain,
+                get_session_history=lambda session_id: SQLAlchemyChatMessageHistory(
+                    db=self.db,
+                    chat_id=UUID(session_id)
+                ),
+                input_messages_key="question",
+                history_messages_key="chat_history",
+            )
+            self._chains[chat_id] = chain_with_history
+            
         return self._chains[chat_id]
 
-    def _build_chain(self, chat_id: UUID):
+    def _build_base_chain(self, chat_id: UUID):
         """
-        Build RAG chain using LCEL.
-
-        Creates a declarative chain that:
-        1. Takes user question as input
-        2. Retrieves relevant documents
-        3. Formats context from documents
-        4. Passes through RAG prompt template
-        5. Invokes LLM
-        6. Parses string output
-
-        Architecture:
-        ```
-        {
-            "context": retriever | _format_docs,
-            "question": RunnablePassthrough(),
-        }
-        | RAG_PROMPT
-        | llm
-        | StrOutputParser()
-        ```
-
-        Args:
-            chat_id: Chat session ID
-
-        Returns:
-            Callable chain for processing queries
+        Builds the core RAG chain that expects history.
         """
         retriever = self._get_or_create_retriever(chat_id)
 
-        # Create the RAG chain using LCEL
-        chain = (
+        # Dynamically insert a placeholder for chat history into the RAG_PROMPT
+        prompt_messages = list(RAG_PROMPT.messages)
+        prompt_messages.insert(1, MessagesPlaceholder(variable_name="chat_history"))
+        prompt_with_history = ChatPromptTemplate.from_messages(prompt_messages)
+
+        # This part of the chain is responsible for generating the context
+        context_chain = itemgetter("question") | retriever | self._format_docs
+        
+        # The main chain for processing the request
+        conversational_rag_chain = (
             {
-                "context": retriever | self._format_docs,
-                "question": RunnablePassthrough(),
+                "context": context_chain,
+                "question": itemgetter("question"),
+                "chat_history": itemgetter("chat_history"),
             }
-            | RAG_PROMPT
+            | prompt_with_history
             | self.llm
             | StrOutputParser()
         )
-
-        print(f"✅ RAG chain built for chat {chat_id}")
-        return chain
+        return conversational_rag_chain
 
     def _format_docs(self, docs: List) -> str:
         """

@@ -37,6 +37,15 @@ class Settings:
     POSTGRES_PORT: int = 5432
     DATABASE_URL: str = "postgresql://postgres:postgres@localhost:5432/postgres"
 
+    # Redis for Caching, Pub/Sub, and Celery
+    REDIS_HOST: str = "localhost"
+    REDIS_PORT: int = 6379
+    REDIS_DB: int = 0
+
+    # Celery for Background Tasks
+    CELERY_BROKER_URL: str = ""
+    CELERY_RESULT_BACKEND_URL: str = ""
+
     # Security
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     JWT_SECRET_KEY: str = "secret"
@@ -83,6 +92,14 @@ class Settings:
         print(f"✅ GOOGLE_API_KEY: configured")
         print(f"✅ LLAMA_CLOUD_API_KEY: {'configured' if self.LLAMA_CLOUD_API_KEY else 'not configured (optional)'}")
         print(f"✅ PostgreSQL: configured at {self.POSTGRES_HOST}:{self.POSTGRES_PORT}")
+
+        # Load Redis settings and configure Celery URLs
+        self.REDIS_HOST = os.getenv("REDIS_HOST", self.REDIS_HOST)
+        self.REDIS_PORT = int(os.getenv("REDIS_PORT", self.REDIS_PORT))
+        self.REDIS_DB = int(os.getenv("REDIS_DB", self.REDIS_DB))
+        self.CELERY_BROKER_URL = f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
+        self.CELERY_RESULT_BACKEND_URL = f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
+        print(f"✅ Redis: configured at {self.REDIS_HOST}:{self.REDIS_PORT}")
 
         # Load security settings
         self.JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", self.JWT_SECRET_KEY)

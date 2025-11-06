@@ -1,1 +1,1 @@
-"""Services for TenderIQ Analyze module"""
+"""Services for the TenderIQ analysis submodule."""

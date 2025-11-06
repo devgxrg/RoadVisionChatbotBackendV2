@@ -234,3 +234,6 @@ xxhash
 yarl
 zipp
 zstandard
+redis
+hiredis
+celery

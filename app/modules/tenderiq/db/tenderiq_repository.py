@@ -40,6 +40,22 @@ class TenderIQRepository:
             .first()
         )
 
+    def get_tenders_by_ids(self, tender_ids: list[UUID]) -> list[ScrapedTender]:
+        """
+        Get a list of tenders by their UUIDs, with all relationships loaded.
+        """
+        if not tender_ids:
+            return []
+        return (
+            self.db.query(ScrapedTender)
+            .filter(ScrapedTender.id.in_(tender_ids))
+            .options(
+                joinedload(ScrapedTender.files),
+                joinedload(ScrapedTender.query)
+            )
+            .all()
+        )
+
     def get_available_scrape_runs(self) -> list[ScrapeRun]:
         """
         Get all distinct scrape runs ordered by most recent first.

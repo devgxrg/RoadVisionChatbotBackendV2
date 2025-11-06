@@ -1,5 +1,10 @@
-"""Router for TenderIQ Analyze module"""
+"""
+Main router for the TenderIQ analysis submodule.
+"""
+from fastapi import APIRouter
+from .endpoints import endpoints
 
-from app.modules.tenderiq.analyze.endpoints.analyze import router
+router = APIRouter()
 
-__all__ = ["router"]
+# Include all endpoint routers from this submodule
+router.include_router(endpoints.router)

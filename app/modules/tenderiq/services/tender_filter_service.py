@@ -15,16 +15,13 @@ from uuid import UUID
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 
+from app.modules.tenderiq.db.repository import TenderRepository
 from app.modules.tenderiq.db.tenderiq_repository import TenderIQRepository
 from app.modules.tenderiq.models.pydantic_models import (
     AvailableDatesResponse,
     FilteredTendersResponse,
     ScrapeDateInfo,
-    TenderResponseForFiltering,
-    TenderDetailResponse,
-    TenderNoticeInfo,
-    TenderKeyDatesInfo,
-    TenderContactInfo,
+    Tender,
     DailyTendersResponse,
     ScrapedTenderQuery,
 )
@@ -37,7 +34,7 @@ class TenderFilterService:
         """Initialize the service"""
         pass
 
-    def get_tender_details(self, db: Session, tender_id: UUID) -> Optional[TenderDetailResponse]:
+    def get_tender_details(self, db: Session, tender_id: UUID) -> Optional[Tender]:
         """
         Get full details for a single tender by its ID.
         """
@@ -45,7 +42,30 @@ class TenderFilterService:
         tender = repo.get_tender_by_id(tender_id)
         if not tender:
             return None
-        return self._full_tender_to_detailed_response(tender)
+        return tender
+
+    def _get_tenders_by_flag(self, db: Session, flag_name: str) -> list[Tender]:
+        """Helper to get all tenders where a specific boolean flag is set."""
+        tender_repo = TenderRepository(db)
+        scraped_tender_repo = TenderIQRepository(db)
+        
+        tenders_with_flag = tender_repo.get_tenders_by_flag(flag_name)
+        tender_ids = [t.id for t in tenders_with_flag]
+        
+        scraped_tenders = scraped_tender_repo.get_tenders_by_ids(tender_ids)
+        return [Tender.model_validate(t) for t in scraped_tenders]
+
+    def get_wishlisted_tenders(self, db: Session) -> list[Tender]:
+        """Gets all tenders that are wishlisted."""
+        return self._get_tenders_by_flag(db, 'is_wishlisted')
+
+    def get_archived_tenders(self, db: Session) -> list[Tender]:
+        """Gets all tenders that are archived."""
+        return self._get_tenders_by_flag(db, 'is_archived')
+
+    def get_favorited_tenders(self, db: Session) -> list[Tender]:
+        """Gets all tenders that are marked as favorite."""
+        return self._get_tenders_by_flag(db, 'is_favorite')
 
     def get_available_dates(self, db: Session) -> AvailableDatesResponse:
         """
@@ -321,76 +341,6 @@ class TenderFilterService:
 
         return dates_list
 
-    def _tender_to_response(self, tender) -> TenderResponseForFiltering:
-        """
-        Convert a ScrapedTender ORM object to a response model.
-
-        Args:
-            tender: ScrapedTender ORM object
-
-        Returns:
-            TenderResponseForFiltering response model
-        """
-        return TenderResponseForFiltering(
-            id=tender.id,
-            tender_id_str=tender.tender_id_str,
-            tender_name=tender.tender_name,
-            tender_url=tender.tender_url,
-            dms_folder_id=tender.dms_folder_id,
-            city=tender.city,
-            value=tender.value,
-            due_date=tender.due_date,
-            summary=tender.summary,
-            query_name=tender.query.query_name if tender.query else None,
-            tender_type=tender.tender_type,
-            tender_value=tender.tender_value,
-            state=tender.state,
-            publish_date=tender.publish_date,
-            last_date_of_bid_submission=tender.last_date_of_bid_submission,
-        )
-
-    def _full_tender_to_detailed_response(self, tender) -> TenderDetailResponse:
-        """
-        Convert a full ScrapedTender ORM object to a detailed, nested response model.
-        """
-        return TenderDetailResponse(
-            id=tender.id,
-            tender_id_str=tender.tender_id_str,
-            tender_name=tender.tender_name,
-            tender_url=tender.tender_url,
-            dms_folder_id=tender.dms_folder_id,
-            summary=tender.summary,
-            value=tender.value,
-            due_date=tender.due_date,
-            notice=TenderNoticeInfo(
-                tdr=tender.tdr,
-                tendering_authority=tender.tendering_authority,
-                tender_no=tender.tender_no,
-                tender_id_detail=tender.tender_id_detail,
-                tender_brief=tender.tender_brief,
-                city=tender.city,
-                state=tender.state,
-                document_fees=tender.document_fees,
-                emd=tender.emd,
-                tender_value=tender.tender_value,
-                tender_type=tender.tender_type,
-                bidding_type=tender.bidding_type,
-                competition_type=tender.competition_type,
-            ),
-            key_dates=TenderKeyDatesInfo(
-                publish_date=tender.publish_date,
-                last_date_of_bid_submission=tender.last_date_of_bid_submission,
-                tender_opening_date=tender.tender_opening_date,
-            ),
-            contact_info=TenderContactInfo(
-                company_name=tender.company_name,
-                contact_person=tender.contact_person,
-                address=tender.address,
-            ),
-            tender_details=tender.tender_details,
-            information_source=tender.information_source,
-            files=tender.files,
-        )
 
     def validate_date_format(self, date_str: str) -> bool:
         """

@@ -1,218 +1,68 @@
 """
-Async Task Processing for Tender Analysis
-
-Handles async processing of tender analyses using background tasks.
-Currently uses simple background execution (can be upgraded to Celery/RQ).
+Celery tasks for the TenderIQ analysis module.
 """
-
 import asyncio
+import uuid
 import logging
-from uuid import UUID
-from datetime import datetime
-from sqlalchemy.orm import Session
-
+import traceback
+from app.celery_app import celery_app
 from app.db.database import SessionLocal
-from app.modules.tenderiq.analyze.db.repository import AnalyzeRepository
-from app.modules.tenderiq.analyze.db.schema import AnalysisStatusEnum
-from app.modules.tenderiq.analyze.services.risk_assessment_service import RiskAssessmentService
-from app.modules.tenderiq.analyze.services.rfp_extraction_service import RFPExtractionService
-from app.modules.tenderiq.analyze.services.scope_extraction_service import ScopeExtractionService
-from app.modules.tenderiq.analyze.services.report_generation_service import ReportGenerationService
+from .db.repository import AnalyzeRepository
+from .events import publish_update
+from .db.schema import AnalysisStatusEnum
+from .services.document_parsing_service import DocumentParsingService
+from app.core.services import pdf_processor, vector_store
 
-logger = logging.getLogger(__name__)
+async def _run_analysis_async(analysis_id: uuid.UUID):
+    """Asynchronous wrapper for the analysis process."""
+    db = SessionLocal()
+    repo = AnalyzeRepository(db)
+    analysis = repo.get_by_id(analysis_id)
+    if not analysis:
+        return
 
+    try:
+        # 1. Parsing Phase
+        repo.update(analysis, {"status": AnalysisStatusEnum.parsing, "progress": 10, "status_message": "Initializing document parsing..."})
+        publish_update(analysis_id, "status", {"status": "parsing", "progress": 10, "message": "Initializing document parsing..."})
+        
+        parsing_service = DocumentParsingService(db=db)
+        await parsing_service.parse_documents_for_analysis(analysis_id)
+        
+        repo.update(analysis, {"progress": 30, "status_message": "Document parsing complete."})
+        publish_update(analysis_id, "status", {"progress": 30, "message": "Document parsing complete."})
 
-class AnalysisTaskProcessor:
-    """Processes tender analysis tasks asynchronously"""
+        # 2. Analysis Phase
+        repo.update(analysis, {"status": AnalysisStatusEnum.analyzing, "progress": 40, "status_message": "Extracting key information..."})
+        publish_update(analysis_id, "status", {"status": "analyzing", "progress": 40, "message": "Extracting key information..."})
 
-    def __init__(self):
-        self.risk_service = RiskAssessmentService()
-        self.rfp_service = RFPExtractionService()
-        self.scope_service = ScopeExtractionService()
-        self.report_service = ReportGenerationService()
+        # TODO: Call One-Pager, Scope of Work, etc. services here.
+        # Each service will be responsible for updating the DB and publishing its own results.
+        await asyncio.sleep(5) # Placeholder for real work
 
-    def process_analysis(self, analysis_id: UUID) -> bool:
-        """
-        Process a tender analysis end-to-end.
+        # 3. Finalization
+        repo.update(analysis, {"status": AnalysisStatusEnum.completed, "progress": 100, "status_message": "Analysis complete."})
+        publish_update(analysis_id, "status", {"status": "completed", "progress": 100, "message": "Analysis complete."})
+        publish_update(analysis_id, "control", "close", event_type="control")
 
-        This method orchestrates all analysis services:
-        1. Risk assessment
-        2. RFP section extraction
-        3. Scope of work extraction
-        4. Report generation
+    except Exception as e:
+        # Log the full traceback to the Celery worker's output for debugging
+        detailed_error = traceback.format_exc()
+        logging.error(f"Tender analysis failed for analysis_id {analysis_id}:\n{detailed_error}")
 
-        Args:
-            analysis_id: UUID of the analysis to process
+        # Provide a user-friendly error message to the DB and frontend
+        user_error_message = f"An unexpected error occurred: {type(e).__name__}"
+        
+        repo.update(analysis, {"status": AnalysisStatusEnum.failed, "error_message": user_error_message})
+        publish_update(analysis_id, "error", {"message": user_error_message}, event_type="error")
+        publish_update(analysis_id, "control", "close", event_type="control")
+    finally:
+        db.close()
 
-        Returns:
-            True if successful, False if failed
-        """
-        db = SessionLocal()
-        repo = AnalyzeRepository(db)
-
-        try:
-            # Get the analysis record
-            analysis = repo.get_analysis_by_id(analysis_id)
-            if not analysis:
-                logger.error(f"Analysis not found: {analysis_id}")
-                return False
-
-            logger.info(f"Starting analysis: {analysis_id}")
-
-            # Update status to processing
-            repo.update_analysis_status(
-                analysis_id,
-                AnalysisStatusEnum.processing,
-                progress=10,
-                current_step="initializing",
-            )
-
-            # Step 1: Risk Assessment (10-40%)
-            if analysis.include_risk_assessment:
-                logger.info(f"Step 1: Risk assessment for {analysis_id}")
-                repo.update_analysis_status(
-                    analysis_id,
-                    AnalysisStatusEnum.processing,
-                    progress=20,
-                    current_step="analyzing-risk",
-                )
-
-                try:
-                    risk_response = self.risk_service.assess_risks(
-                        db=db,
-                        analysis_id=analysis_id,
-                        tender_id=analysis.tender_id,
-                        depth="summary",
-                    )
-                    logger.info(f"✅ Risk assessment completed: score={risk_response.risk_score}")
-                except Exception as e:
-                    logger.error(f"❌ Risk assessment failed: {e}")
-                    # Continue with other analyses even if risk fails
-
-            # Step 2: RFP Analysis (40-60%)
-            if analysis.include_rfp_analysis:
-                logger.info(f"Step 2: RFP extraction for {analysis_id}")
-                repo.update_analysis_status(
-                    analysis_id,
-                    AnalysisStatusEnum.processing,
-                    progress=40,
-                    current_step="extracting-rfp",
-                )
-
-                try:
-                    rfp_response = self.rfp_service.extract_rfp_sections(
-                        db=db,
-                        analysis_id=analysis_id,
-                        tender_id=analysis.tender_id,
-                        include_compliance=False,
-                    )
-                    logger.info(f"✅ RFP extraction completed: sections={rfp_response.total_sections}")
-                except Exception as e:
-                    logger.error(f"❌ RFP extraction failed: {e}")
-
-            # Step 3: Scope Extraction (60-80%)
-            if analysis.include_scope_of_work:
-                logger.info(f"Step 3: Scope extraction for {analysis_id}")
-                repo.update_analysis_status(
-                    analysis_id,
-                    AnalysisStatusEnum.processing,
-                    progress=60,
-                    current_step="extracting-scope",
-                )
-
-                try:
-                    scope_response = self.scope_service.extract_scope(
-                        db=db,
-                        analysis_id=analysis_id,
-                        tender_id=analysis.tender_id,
-                    )
-                    logger.info(f"✅ Scope extraction completed: effort={scope_response.scope_of_work.estimated_total_effort}d")
-                except Exception as e:
-                    logger.error(f"❌ Scope extraction failed: {e}")
-
-            # Step 4: Summary Generation (80-95%)
-            logger.info(f"Step 4: Summary generation for {analysis_id}")
-            repo.update_analysis_status(
-                analysis_id,
-                AnalysisStatusEnum.processing,
-                progress=80,
-                current_step="generating-summary",
-            )
-
-            try:
-                one_pager = self.report_service.generate_one_pager(
-                    db=db,
-                    analysis_id=analysis_id,
-                    tender_id=analysis.tender_id,
-                    format="markdown",
-                    include_risk_assessment=analysis.include_risk_assessment,
-                    include_scope_of_work=analysis.include_scope_of_work,
-                    include_financials=True,
-                )
-                logger.info(f"✅ Summary generation completed")
-
-                # Store results in database
-                repo.create_analysis_results(
-                    analysis_id=analysis_id,
-                    one_pager_json=one_pager.one_pager,
-                )
-            except Exception as e:
-                logger.error(f"❌ Summary generation failed: {e}")
-
-            # Mark as completed (95-100%)
-            logger.info(f"Analysis completed: {analysis_id}")
-            repo.update_analysis_status(
-                analysis_id,
-                AnalysisStatusEnum.completed,
-                progress=100,
-                current_step="completed",
-            )
-
-            return True
-
-        except Exception as e:
-            logger.error(f"❌ Unexpected error in analysis: {e}", exc_info=True)
-            repo.update_analysis_status(
-                analysis_id,
-                AnalysisStatusEnum.failed,
-                error_message=str(e),
-            )
-            return False
-
-        finally:
-            db.close()
-
-
-# Global task processor instance
-task_processor = AnalysisTaskProcessor()
-
-
-def process_analysis_sync(analysis_id: UUID) -> bool:
+@celery_app.task
+def run_tender_analysis(analysis_id: str):
     """
-    Process analysis synchronously.
-
-    This is a wrapper that can be used by background job workers.
-
-    Args:
-        analysis_id: UUID of analysis to process
-
-    Returns:
-        True if successful, False otherwise
+    The main Celery task to perform a full tender analysis.
+    This synchronous task runs the main async analysis function.
     """
-    return task_processor.process_analysis(analysis_id)
-
-
-async def process_analysis_async(analysis_id: UUID) -> bool:
-    """
-    Process analysis asynchronously using asyncio.
-
-    This is for integration with async frameworks.
-
-    Args:
-        analysis_id: UUID of analysis to process
-
-    Returns:
-        True if successful, False otherwise
-    """
-    loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(None, process_analysis_sync, analysis_id)
+    asyncio.run(_run_analysis_async(uuid.UUID(analysis_id)))

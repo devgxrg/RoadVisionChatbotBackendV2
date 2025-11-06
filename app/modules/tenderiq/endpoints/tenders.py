@@ -4,13 +4,18 @@ from typing import Optional
 from uuid import UUID
 
 from app.db.database import get_db_session
+from app.modules.auth.services.auth_service import get_current_active_user
+from app.modules.auth.db.schema import User
 from app.modules.tenderiq.models.pydantic_models import (
     DailyTendersResponse,
     AvailableDatesResponse,
-    TenderDetailResponse,
+    Tender,
+    FilteredTendersResponse,
+    TenderActionRequest,
 )
 from app.modules.tenderiq.services import tender_service
 from app.modules.tenderiq.services.tender_filter_service import TenderFilterService
+from app.modules.tenderiq.services.tender_action_service import TenderActionService
 
 router = APIRouter()
 
@@ -44,7 +49,7 @@ def get_daily_tenders(db: Session = Depends(get_db_session)):
 
 @router.get(
     "/tenders/{tender_id}",
-    response_model=TenderDetailResponse,
+    response_model=Tender,
     tags=["TenderIQ"],
     summary="Get detailed information for a single tender",
 )
@@ -64,6 +69,77 @@ def get_tender_details(
             detail="Tender not found.",
         )
     return tender_details
+
+
+@router.get(
+    "/wishlist",
+    response_model=list[Tender],
+    tags=["TenderIQ"],
+    summary="Get all wishlisted tenders"
+)
+def get_wishlisted_tenders(db: Session = Depends(get_db_session)):
+    """Retrieves all tenders that have been marked as wishlisted."""
+    service = TenderFilterService()
+    return service.get_wishlisted_tenders(db)
+
+
+@router.get(
+    "/archived",
+    response_model=list[Tender],
+    tags=["TenderIQ"],
+    summary="Get all archived tenders"
+)
+def get_archived_tenders(db: Session = Depends(get_db_session)):
+    """Retrieves all tenders that have been marked as archived."""
+    service = TenderFilterService()
+    return service.get_archived_tenders(db)
+
+
+@router.get(
+    "/favourite",
+    response_model=list[Tender],
+    tags=["TenderIQ"],
+    summary="Get all favorite tenders"
+)
+def get_favorite_tenders(db: Session = Depends(get_db_session)):
+    """Retrieves all tenders that have been marked as a favorite."""
+    service = TenderFilterService()
+    return service.get_favorited_tenders(db)
+
+
+@router.post(
+    "/tenders/{tender_id}/actions",
+    tags=["TenderIQ"],
+    summary="Perform an action on a tender",
+    status_code=status.HTTP_200_OK,
+)
+def perform_tender_action(
+    tender_id: UUID,
+    request: TenderActionRequest,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(get_current_active_user),
+):
+    """
+    Perform an action on a tender, such as wishlisting, archiving, or updating its status.
+
+    **Available Actions:**
+    - `toggle_wishlist`: Adds or removes the tender from the user's wishlist.
+    - `toggle_favorite`: Marks or unmarks the tender as a favorite.
+    - `toggle_archive`: Archives or unarchives the tender.
+    - `update_status`: Changes the tender's main status (e.g., 'Won', 'Lost'). Requires a `status` in the payload.
+    - `update_review_status`: Changes the tender's review status (e.g., 'Reviewed'). Requires a `review_status` in the payload.
+    """
+    try:
+        service = TenderActionService(db)
+        service.perform_action(tender_id, current_user.id, request)
+        return {"message": "Action performed successfully", "tender_id": str(tender_id)}
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An unexpected error occurred: {e}",
+        )
 
 
 # ==================== Date Filtering Endpoints ====================
