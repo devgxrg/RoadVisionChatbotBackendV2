@@ -52,7 +52,8 @@ class TenderFilterService:
         tenders_with_flag = tender_repo.get_tenders_by_flag('is_wishlisted')
         tender_ids = [t.id for t in tenders_with_flag]
         
-        return scraped_tender_repo.get_tenders_by_ids(tender_ids)
+        scraped_tenders = scraped_tender_repo.get_tenders_by_ids(tender_ids)
+        return [Tender.model_validate(t) for t in scraped_tenders]
 
     def get_archived_tenders(self, db: Session) -> list[Tender]:
         """Gets all tenders that are archived."""
@@ -62,7 +63,8 @@ class TenderFilterService:
         tenders_with_flag = tender_repo.get_tenders_by_flag('is_archived')
         tender_ids = [t.id for t in tenders_with_flag]
 
-        return scraped_tender_repo.get_tenders_by_ids(tender_ids)
+        scraped_tenders = scraped_tender_repo.get_tenders_by_ids(tender_ids)
+        return [Tender.model_validate(t) for t in scraped_tenders]
 
     def get_favorited_tenders(self, db: Session) -> list[Tender]:
         """Gets all tenders that are marked as favorite."""
@@ -72,7 +74,8 @@ class TenderFilterService:
         tenders_with_flag = tender_repo.get_tenders_by_flag('is_favorite')
         tender_ids = [t.id for t in tenders_with_flag]
 
-        return scraped_tender_repo.get_tenders_by_ids(tender_ids)
+        scraped_tenders = scraped_tender_repo.get_tenders_by_ids(tender_ids)
+        return [Tender.model_validate(t) for t in scraped_tenders]
 
     def get_available_dates(self, db: Session) -> AvailableDatesResponse:
         """
