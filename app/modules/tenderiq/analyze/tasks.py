@@ -3,6 +3,8 @@ Celery tasks for the TenderIQ analysis module.
 """
 import asyncio
 import uuid
+import logging
+import traceback
 from app.celery_app import celery_app
 from app.db.database import SessionLocal
 from .db.repository import AnalyzeRepository
