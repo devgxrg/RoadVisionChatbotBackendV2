@@ -218,11 +218,68 @@ class VectorStoreManager:
             traceback.print_exc()
             return 0
 
-    def query_tender(self, tender_id: str, query: str, n_results: int = settings.RAG_TOP_K):
-        pass
+    def query_tender(self, tender_id: str, query: str, n_results: int = settings.RAG_TOP_K) -> List[Tuple]:
+        """Queries a tender's specific Weaviate collection."""
+        if not self.client:
+            return []
+
+        try:
+            # Sanitize tender_id to get the correct collection name
+            sanitized_tender_id = re.sub(r'[^a-zA-Z0-9_]', '_', tender_id)
+            collection_name = f"Tender_{sanitized_tender_id}"
+
+            if not self.client.collections.exists(collection_name):
+                print(f"⚠️  Collection {collection_name} does not exist for querying.")
+                return []
+
+            collection = self.client.collections.get(collection_name)
+            
+            query_embedding = self.embedding_model.encode([query]).tolist()
+            
+            response = collection.query.near_vector(
+                near_vector=query_embedding[0],
+                limit=n_results,
+                include_vector=False
+            )
+            
+            results_list = []
+            seen_content = set()
+            
+            for obj in response.objects:
+                doc = obj.properties.get("content", "")
+                content_hash = doc[:100]
+                if content_hash in seen_content: continue
+                seen_content.add(content_hash)
+                
+                similarity = 0
+                if obj.metadata and obj.metadata.distance is not None:
+                    similarity = 1 - obj.metadata.distance
+                
+                results_list.append((doc, obj.properties, similarity))
+
+            results_list.sort(key=lambda x: x[2], reverse=True)
+            return results_list
+            
+        except Exception as e:
+            print(f"❌ Weaviate tender query error: {e}")
+            traceback.print_exc()
+            return []
 
     def delete_tender_collection(self, tender_id: str):
-        pass
+        """Deletes a tender's specific Weaviate collection."""
+        if not self.client:
+            return
+            
+        try:
+            # Sanitize tender_id to get the correct collection name
+            sanitized_tender_id = re.sub(r'[^a-zA-Z0-9_]', '_', tender_id)
+            collection_name = f"Tender_{sanitized_tender_id}"
+            
+            if self.client.collections.exists(collection_name):
+                self.client.collections.delete(collection_name)
+                print(f"🗑️  Deleted Weaviate collection: {collection_name}")
+        except Exception as e:
+            print(f"⚠️  Error deleting Weaviate tender collection: {e}")
     # --- Renamed ChromaDB Methods for Backup ---
     
     def get_or_create_collection_chroma(self, chat_id: str):
