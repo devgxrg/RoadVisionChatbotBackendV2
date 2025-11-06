@@ -35,19 +35,13 @@ def test_tender_processing(tender_url: str):
         tender_id_str = detail_page_data.notice.tender_id
         
         from app.modules.scraper.db.schema import ScrapedTender
-        from app.modules.tenderiq.db.schema import Tender
         
         scraped_tender = db.query(ScrapedTender).filter(ScrapedTender.tender_id_str == tender_id_str).first()
         if not scraped_tender:
             print(f"❌ Verification failed: ScrapedTender with id '{tender_id_str}' not found in 'scraped_tenders' table.")
             return
 
-        tender_record = db.query(Tender).filter(Tender.id == scraped_tender.id).first()
-        if not tender_record:
-            print(f"❌ Verification failed: Tender record for '{tender_id_str}' not found in 'tenders' table.")
-            return
-
-        analysis = analyze_repo.get_by_tender_id(tender_record.id)
+        analysis = analyze_repo.get_by_tender_id(scraped_tender.id)
         
         if analysis:
             print("✅ Verification successful! Found analysis record in the database.")
