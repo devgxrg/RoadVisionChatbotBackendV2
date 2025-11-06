@@ -43,6 +43,10 @@ class Tender(Base):
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     is_favorite = Column(Boolean, default=False)
     is_archived = Column(Boolean, default=False)
+    is_wishlisted = Column(Boolean, default=False, index=True)
+
+    history = relationship("TenderActionHistory", back_populates="tender", cascade="all, delete-orphan")
+
 
 class TenderDocument(Base):
     __tablename__ = 'tender_documents'
@@ -84,6 +88,33 @@ class TenderNote(Base):
     is_important = Column(Boolean, default=False)
 
 import enum
+
+
+class TenderActionEnum(str, enum.Enum):
+    """Enumeration for user actions on a tender."""
+    viewed = "viewed"
+    wishlisted = "wishlisted"
+    unwishlisted = "unwishlisted"
+    analysis_started = "analysis_started"
+    analysis_completed = "analysis_completed"
+    shortlisted = "shortlisted"
+    accepted = "accepted"
+    rejected = "rejected"
+
+
+class TenderActionHistory(Base):
+    """Logs specific user-driven actions on a tender for history tracking."""
+    __tablename__ = 'tender_action_history'
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tender_id = Column(UUID(as_uuid=True), ForeignKey('tenders.id'), nullable=False, index=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=False, index=True)
+    action = Column(Enum(TenderActionEnum), nullable=False)
+    notes = Column(Text, nullable=True)
+    timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    tender = relationship("Tender", back_populates="history")
+    user = relationship("User")
+
 
 class TenderActivityLog(Base):
     __tablename__ = 'tender_activity_log'
