@@ -25,7 +25,7 @@ class TenderRepository:
         Gets a Tender by its UUID. If it doesn't exist, it creates one
         based on the corresponding ScrapedTender data.
         """
-        tender = self.db.query(Tender).filter(Tender.id == scraped_tender.id).first()
+        tender = self.db.query(Tender).filter(Tender.tender_ref_number == scraped_tender.tender_id_str).first()
         if not tender:
             # Map fields from ScrapedTender to Tender
             tender = Tender(
