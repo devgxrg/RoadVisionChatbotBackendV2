@@ -129,8 +129,36 @@ class VectorStoreManager:
         except Exception as e:
             print(f"⚠️  Error deleting Weaviate collection: {e}")
 
-    def create_tender_collection(self, tender_id: str):
-        pass
+    def create_tender_collection(self, tender_id: str) -> Collection:
+        """
+        Creates a new, empty Weaviate collection for a tender, deleting any
+        existing collection with the same name to ensure freshness.
+        """
+        if not self.client:
+            raise Exception("Weaviate client not initialized")
+
+        # Weaviate collection names must start with an uppercase letter.
+        # Sanitize tender_id to remove characters invalid in collection names.
+        sanitized_tender_id = re.sub(r'[^a-zA-Z0-9_]', '_', tender_id)
+        collection_name = f"Tender_{sanitized_tender_id}"
+        
+        if self.client.collections.exists(collection_name):
+            print(f"🗑️  Deleting existing Weaviate collection: {collection_name}")
+            self.client.collections.delete(collection_name)
+        
+        print(f"📂 Creating Weaviate collection for tender: {collection_name}")
+        return self.client.collections.create(
+            name=collection_name,
+            properties=[
+                wvc.Property(name="content", data_type=wvc.DataType.TEXT, description="The text content of the chunk."),
+                wvc.Property(name="document_name", data_type=wvc.DataType.TEXT, description="The original filename of the source document."),
+                wvc.Property(name="document_type", data_type=wvc.DataType.TEXT, description="File type like pdf, excel, etc."),
+                wvc.Property(name="chunk_type", data_type=wvc.DataType.TEXT, description="Type of chunk, e.g., 'text' or 'table'."),
+                wvc.Property(name="page_number", data_type=wvc.DataType.TEXT, description="Page number of the chunk, stored as text."),
+                wvc.Property(name="chunk_index", data_type=wvc.DataType.INT, description="Sequential index of the chunk within the document."),
+            ],
+            vectorizer_config=wvc.Configure.Vectorizer.none(),
+        )
 
     def add_tender_chunks(self, tender_id: str, chunks: List[Dict]):
         pass
