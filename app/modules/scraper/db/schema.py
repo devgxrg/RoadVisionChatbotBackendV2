@@ -99,6 +99,9 @@ class ScrapedTender(Base):
     value = Column(String)
     due_date = Column(String)
 
+    analysis_status = Column(String, default="pending", nullable=False)  # "pending", "failed", "skipped", "completed"
+    error_message = Column(Text, nullable=True)
+
     query_id = Column(UUID(as_uuid=True), ForeignKey('scraped_tender_queries.id'))
     query = relationship("ScrapedTenderQuery", back_populates="tenders")
 

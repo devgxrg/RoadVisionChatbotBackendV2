@@ -9,7 +9,7 @@ def notice_table_helper(search: str, rows: List[Tag]) -> str:
     for row in rows:
         if search in row.text:
             print("Row text: " + row.text)
-            return row.find_all('td')[1].text
+            return row.find_all('td')[1].text.strip()
 
     return "N/A"
 
@@ -57,12 +57,12 @@ def scrape_details(table: Tag) -> TenderDetailDetails:
     p = table.find('p')
     if not p:
         raise Exception("Tender details table does not have a paragraph")
-    return TenderDetailDetails(tender_details=p.text)
+    return TenderDetailDetails(tender_details=p.text.strip())
 
 def key_dates_helper(search: str, rows: List[Tag]) -> str:
     for row in rows:
         if search in row.text:
-            return row.find_all('td')[1].text
+            return row.find_all('td')[1].text.strip()
 
     return "N/A"
 
@@ -85,7 +85,7 @@ def scrape_key_dates(table: Tag) -> TenderDetailKeyDates:
 def contact_information_helper(search: str, rows: List[Tag]) -> str:
     for row in rows:
         if search in row.text:
-            return row.find_all('td')[1].text
+            return row.find_all('td')[1].text.strip()
 
     return "N/A"
 
@@ -121,7 +121,7 @@ def scrape_other_details(table: Tag) -> TenderDetailOtherDetail:
         raise Exception("Tender other details table has incorrect number of rows")
 
     # Information source
-    information_source = rows[1].find_all('td')[1].text
+    information_source = rows[1].find_all('td')[1].text.strip()
 
     # Another sub-table
     sub_table = rows[2]
@@ -139,9 +139,9 @@ def scrape_other_details(table: Tag) -> TenderDetailOtherDetail:
         if not url_element:
             raise Exception("Tender other details table sub-table does not have a link")
         file_link = url_element.attrs['href']
-        file_name = file_row.find_all('td')[1].text
-        file_type = file_row.find_all('td')[2].text
-        file_size = file_row.find_all('td')[3].text
+        file_name = file_row.find_all('td')[1].text.strip()
+        file_type = file_row.find_all('td')[2].text.strip()
+        file_size = file_row.find_all('td')[3].text.strip()
         files.append(TenderDetailPageFile(
             file_name=file_name,
             file_url=str(file_link),

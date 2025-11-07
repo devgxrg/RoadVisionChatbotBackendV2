@@ -247,6 +247,24 @@ class ProgressTracker:
         logger.info(f"Deduplication Check Started: {total} items to check")
         return bar
 
+    def create_analysis_progress_bar(self, total: int) -> tqdm:
+        """
+        Create progress bar for tender analysis.
+        """
+        if total == 0:
+            return None
+
+        bar = tqdm(
+            total=total,
+            desc="🔬 Analyzing Tenders",
+            unit="tender",
+            bar_format="{desc}: {percentage:3.0f}%|{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}]",
+            disable=not self.verbose,
+        )
+        self.progress_bars["analysis"] = bar
+        logger.info(f"Tender Analysis Started: {total} tenders to analyze")
+        return bar
+
     def update_progress(self, bar_key: str, n: int = 1, message: Optional[str] = None):
         """
         Update a progress bar.

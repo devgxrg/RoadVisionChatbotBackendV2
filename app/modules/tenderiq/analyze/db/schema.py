@@ -8,7 +8,6 @@ from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 
 from app.db.database import Base
-from app.modules.tenderiq.db.schema import Tender
 from app.modules.auth.db.schema import User
 from app.modules.askai.db.models import Chat
 from ..models.pydantic_models import OnePagerSchema, ScopeOfWorkSchema, DataSheetSchema
@@ -26,14 +25,14 @@ class AnalysisStatusEnum(str, enum.Enum):
 class TenderAnalysis(Base):
     """
     Central table to track the analysis of a single tender.
-    Maintains a one-to-one relationship with a Tender.
+    Maintains a one-to-one relationship with a ScrapedTender.
     """
     __tablename__ = 'tender_analysis'
     id: Mapped[uuid.UUID] = mapped_column(postgresql.UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     
-    # One-to-one relationship to the Tender being analyzed
-    tender_id: Mapped[uuid.UUID] = mapped_column(postgresql.UUID(as_uuid=True), ForeignKey(Tender.id), nullable=False, unique=True, index=True)
-    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey(User.id), nullable=False, index=True)
+    # One-to-one relationship to the ScrapedTender being analyzed. This refers to scraped_tenders.tender_id_str.
+    tender_id: Mapped[str] = mapped_column(String, nullable=False, unique=True, index=True)
+    user_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey(User.id), nullable=True, index=True)
     chat_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey(Chat.id))
     
     # Analysis metadata
@@ -54,7 +53,6 @@ class TenderAnalysis(Base):
     data_sheet_json: Mapped[Optional[DataSheetSchema]] = mapped_column(JSON)
 
     # Relationships
-    tender: Mapped["Tender"] = relationship(backref="analysis", uselist=False)
     user: Mapped["User"] = relationship()
     chat: Mapped[Optional["Chat"]] = relationship()
     rfp_sections: Mapped[List["AnalysisRFPSection"]] = relationship(back_populates="analysis", cascade="all, delete-orphan")
@@ -64,8 +62,8 @@ class TenderAnalysis(Base):
         """Converts the SQLAlchemy model instance to a dictionary."""
         return {
             "id": str(self.id),
-            "tender_id": str(self.tender_id),
-            "user_id": str(self.user_id),
+            "tender_id": self.tender_id,
+            "user_id": str(self.user_id) if self.user_id else None,
             "chat_id": str(self.chat_id) if self.chat_id else None,
             "status": self.status.value if self.status else None,
             "progress": self.progress,

@@ -8,6 +8,7 @@ interacting with the `tenders` table and related entities.
 from typing import Optional
 from uuid import UUID
 from datetime import datetime
+from dateutil import parser
 from sqlalchemy.orm import Session
 
 from app.modules.tenderiq.db.schema import Tender, TenderActionHistory, TenderActionEnum
@@ -25,7 +26,7 @@ class TenderRepository:
         Gets a Tender by its UUID. If it doesn't exist, it creates one
         based on the corresponding ScrapedTender data.
         """
-        tender = self.db.query(Tender).filter(Tender.id == scraped_tender.id).first()
+        tender = self.db.query(Tender).filter(Tender.tender_ref_number == scraped_tender.tender_id_str).first()
         if not tender:
             # Map fields from ScrapedTender to Tender
             tender = Tender(
@@ -81,10 +82,14 @@ class TenderRepository:
         if not date_str:
             return None
         try:
-            # Assumes "DD-MM-YYYY" format from ScrapedTender
-            return datetime.strptime(date_str, "%d-%m-%Y")
+            # Assumes "DD-Mon-YYYY" format from ScrapedTender e.g. "08-Nov-2025"
+            return datetime.strptime(date_str, "%d-%b-%Y")
         except (ValueError, TypeError):
-            return None
+            # Fallback for other potential formats if needed in the future
+            try:
+                return parser.parse(date_str)
+            except (parser.ParserError, TypeError):
+                return None
 
     def get_tenders_by_flag(self, flag_name: str, flag_value: bool = True) -> list[Tender]:
         """

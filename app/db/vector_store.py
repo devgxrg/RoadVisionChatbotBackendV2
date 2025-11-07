@@ -129,6 +129,147 @@ class VectorStoreManager:
         except Exception as e:
             print(f"⚠️  Error deleting Weaviate collection: {e}")
 
+    def create_tender_collection(self, tender_id: str) -> Collection:
+        """
+        Creates a new, empty Weaviate collection for a tender, deleting any
+        existing collection with the same name to ensure freshness.
+        """
+        if not self.client:
+            raise Exception("Weaviate client not initialized")
+
+        # Weaviate collection names must start with an uppercase letter.
+        # Sanitize tender_id to remove characters invalid in collection names.
+        sanitized_tender_id = re.sub(r'[^a-zA-Z0-9_]', '_', tender_id)
+        collection_name = f"Tender_{sanitized_tender_id}"
+        
+        if self.client.collections.exists(collection_name):
+            print(f"🗑️  Deleting existing Weaviate collection: {collection_name}")
+            self.client.collections.delete(collection_name)
+        
+        print(f"📂 Creating Weaviate collection for tender: {collection_name}")
+        return self.client.collections.create(
+            name=collection_name,
+            properties=[
+                wvc.Property(name="content", data_type=wvc.DataType.TEXT, description="The text content of the chunk."),
+                wvc.Property(name="document_name", data_type=wvc.DataType.TEXT, description="The original filename of the source document."),
+                wvc.Property(name="document_type", data_type=wvc.DataType.TEXT, description="File type like pdf, excel, etc."),
+                wvc.Property(name="chunk_type", data_type=wvc.DataType.TEXT, description="Type of chunk, e.g., 'text' or 'table'."),
+                wvc.Property(name="page_number", data_type=wvc.DataType.TEXT, description="Page number of the chunk, stored as text."),
+                wvc.Property(name="chunk_index", data_type=wvc.DataType.INT, description="Sequential index of the chunk within the document."),
+            ],
+            vectorizer_config=wvc.Configure.Vectorizer.none(),
+        )
+
+    def add_tender_chunks(self, collection: Collection, chunks: List[Dict]) -> int:
+        """
+        Adds processed document chunks to a tender's specific Weaviate collection.
+        This method handles vectorization and batch insertion.
+        """
+        if not self.client or not chunks:
+            return 0
+
+        try:
+            data_objects = []
+            for chunk in chunks:
+                metadata = chunk.get("metadata", {})
+                
+                # Safely get and convert chunk index
+                chunk_idx_str = metadata.get("chunk_index", metadata.get("table_index", "0"))
+                try:
+                    chunk_idx = int(chunk_idx_str)
+                except (ValueError, TypeError):
+                    chunk_idx = 0
+                
+                properties = {
+                    "content": chunk.get("content", ""),
+                    "document_name": metadata.get("source", "unknown"),
+                    "document_type": metadata.get("doc_type", "unknown"),
+                    "chunk_type": metadata.get("type", "unknown"),
+                    "page_number": str(metadata.get("page", "0")),
+                    "chunk_index": chunk_idx,
+                }
+                data_objects.append(properties)
+
+            content_for_embedding = [obj["content"] for obj in data_objects]
+            vectors = self.embedding_model.encode(content_for_embedding, show_progress_bar=True, batch_size=32)
+
+            with collection.batch.dynamic() as batch:
+                for i, data_obj in enumerate(data_objects):
+                    batch.add_object(
+                        properties=data_obj,
+                        vector=vectors[i]
+                    )
+
+            print(f"✅ Added {len(data_objects)} chunks to Weaviate collection {collection.name}")
+            return len(data_objects)
+
+        except Exception as e:
+            print(f"❌ Error adding tender chunks to Weaviate: {e}")
+            traceback.print_exc()
+            return 0
+
+    def query_tender(self, tender_id: str, query: str, n_results: int = settings.RAG_TOP_K) -> List[Tuple]:
+        """Queries a tender's specific Weaviate collection."""
+        if not self.client:
+            return []
+
+        try:
+            # Sanitize tender_id to get the correct collection name
+            sanitized_tender_id = re.sub(r'[^a-zA-Z0-9_]', '_', tender_id)
+            collection_name = f"Tender_{sanitized_tender_id}"
+
+            if not self.client.collections.exists(collection_name):
+                print(f"⚠️  Collection {collection_name} does not exist for querying.")
+                return []
+
+            collection = self.client.collections.get(collection_name)
+            
+            query_embedding = self.embedding_model.encode([query]).tolist()
+            
+            response = collection.query.near_vector(
+                near_vector=query_embedding[0],
+                limit=n_results,
+                include_vector=False
+            )
+            
+            results_list = []
+            seen_content = set()
+            
+            for obj in response.objects:
+                doc = obj.properties.get("content", "")
+                content_hash = doc[:100]
+                if content_hash in seen_content: continue
+                seen_content.add(content_hash)
+                
+                similarity = 0
+                if obj.metadata and obj.metadata.distance is not None:
+                    similarity = 1 - obj.metadata.distance
+                
+                results_list.append((doc, obj.properties, similarity))
+
+            results_list.sort(key=lambda x: x[2], reverse=True)
+            return results_list
+            
+        except Exception as e:
+            print(f"❌ Weaviate tender query error: {e}")
+            traceback.print_exc()
+            return []
+
+    def delete_tender_collection(self, tender_id: str):
+        """Deletes a tender's specific Weaviate collection."""
+        if not self.client:
+            return
+            
+        try:
+            # Sanitize tender_id to get the correct collection name
+            sanitized_tender_id = re.sub(r'[^a-zA-Z0-9_]', '_', tender_id)
+            collection_name = f"Tender_{sanitized_tender_id}"
+            
+            if self.client.collections.exists(collection_name):
+                self.client.collections.delete(collection_name)
+                print(f"🗑️  Deleted Weaviate collection: {collection_name}")
+        except Exception as e:
+            print(f"⚠️  Error deleting Weaviate tender collection: {e}")
     # --- Renamed ChromaDB Methods for Backup ---
     
     def get_or_create_collection_chroma(self, chat_id: str):
