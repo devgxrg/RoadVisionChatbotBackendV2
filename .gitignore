@@ -17,4 +17,3 @@ token.json
 *.sql
 __pycache__/
 *.pyc
-app.py
