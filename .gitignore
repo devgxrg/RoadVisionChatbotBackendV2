@@ -10,18 +10,11 @@ data/
 tenders/
 dms/
 *.log
-
-# macOS
 .DS_Store
-
-# Virtual environments
 venv/
-
-# Local development files
 .env
 token.json
 *.sql
-
-# Python cache
 __pycache__/
 *.pyc
+app.py
