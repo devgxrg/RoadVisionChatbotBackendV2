@@ -2,6 +2,7 @@ from typing import List
 from sqlalchemy.orm.session import Session
 from app.core.services import vector_store
 from app.modules.tenderiq.db.schema import Tender
+from app.modules.analyze.repositories import repository as analyze_repo
 
 # TODO: Implement the following function as per requirements
 def analyze_tender(db: Session, tdr: str):
@@ -32,7 +33,3 @@ def analyze_tender(db: Session, tdr: str):
 
     """
     pass
-
-def get_wishlisted_tenders(db: Session, tdr: str) -> List[Tender]:
-    wishlisted = db.query(Tender).filter(Tender.is_wishlisted == True).all()
-    return wishlisted

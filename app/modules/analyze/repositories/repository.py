@@ -9,7 +9,7 @@ from app.modules.tenderiq.db.schema import Tender
 
 from ..db.schema import TenderAnalysis
 
-def get_wishlisted_tenders(db: Session, tdr: str) -> List[Tender]:
+def get_wishlisted_tenders(db: Session) -> List[Tender]:
     wishlisted = db.query(Tender).filter(Tender.is_wishlisted == True).all()
     return wishlisted
 
