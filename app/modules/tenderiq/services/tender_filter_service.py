@@ -365,17 +365,17 @@ class TenderFilterService:
         """
         word = word.lower()
         if "crore" in word:
-            number_str = word.replace("crore", "").strip()
+            number_str = re.sub("[^0-9.]", "", word)
             return float(number_str) * 10000000
         elif "lakh" in word:
-            number_str = word.replace("lakh", "").strip()
+            number_str = re.sub("[^0-9.]", "", word)
             return float(number_str) * 100000
         elif "thousand" in word:
-            number_str = word.replace("thousand", "").strip()
+            number_str = re.sub("[^0-9.]", "", word)
             return float(number_str) * 1000
         else:
             word = word.split(".")[0]
-            regexed = re.sub("[^0-9]", "", word)
+            regexed = re.sub("[^0-9.]", "", word)
             if regexed:
                 return float(regexed)
 

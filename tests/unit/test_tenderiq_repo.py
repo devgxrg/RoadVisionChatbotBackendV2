@@ -1,15 +1,15 @@
 
-from app.db.database import SessionLocal, get_db_session
-from app.modules.tenderiq.db.schema import Tender
-from app.modules.tenderiq.db.tenderiq_repository import TenderIQRepository
+from app.db.database import SessionLocal
+from app.modules.tenderiq.repositories import repository as repo
+
+from app.modules.tenderiq.services import tender_service_sse as service
+import json
 
 db = SessionLocal()
 
-test = db.query(Tender).all()
-print(test)
+scrape_runs = repo.get_scrape_runs(db)
+latest_scrape_run = scrape_runs[0]
+categories_of_current_day = repo.get_all_categories(db, latest_scrape_run)
 
-exit()
-repo = TenderIQRepository(db)
-scrape_runs = repo.get_scrape_runs_by_date_range(days=None)
-print(scrape_runs)
-
+daily_tenders = service.get_daily_tenders_sse(db)
+print(daily_tenders)

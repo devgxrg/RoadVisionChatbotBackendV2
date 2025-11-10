@@ -17,6 +17,7 @@ from app.modules.scraper.db import schema as scraper_schema
 from app.modules.dmsiq.db import schema as dms_schema
 from app.modules.tenderiq.db import schema as tenderiq_schema
 from app.modules.tenderiq.analyze.db import schema as tenderiq_analyze_schema
+from app.modules.analyze.db import schema as analyze_schema
 import pgvector
 from pgvector.sqlalchemy import Vector
 

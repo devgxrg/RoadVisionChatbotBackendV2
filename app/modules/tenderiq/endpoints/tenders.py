@@ -18,6 +18,8 @@ from app.modules.tenderiq.models.pydantic_models import (
 from app.modules.tenderiq.services import tender_service
 from app.modules.tenderiq.services.tender_filter_service import TenderFilterService
 from app.modules.tenderiq.services.tender_action_service import TenderActionService
+from sse_starlette.sse import EventSourceResponse
+from app.modules.tenderiq.services import tender_service_sse
 
 router = APIRouter()
 
@@ -48,6 +50,14 @@ def get_daily_tenders(db: Session = Depends(get_db_session)):
         )
     return latest_tenders
 
+@router.get(
+    "/tenders-sse",
+    response_model=DailyTendersResponse,
+    tags=["TenderIQ"],
+    summary="SSE version of the /tenders endpoint"
+)
+def get_daily_tenders_sse(db: Session = Depends(get_db_session)):
+    return tender_service_sse.get_daily_tenders_sse(db)
 
 @router.get(
     "/tenders/{tender_id}",

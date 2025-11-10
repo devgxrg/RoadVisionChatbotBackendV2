@@ -112,7 +112,6 @@ class TenderActionHistory(Base):
     notes = Column(Text, nullable=True)
     timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     tender = relationship("Tender", back_populates="history")
-    user = relationship("User")
 
 
 class TenderActivityLog(Base):

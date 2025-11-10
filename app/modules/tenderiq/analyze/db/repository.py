@@ -5,7 +5,7 @@ from typing import Optional
 from uuid import UUID
 from sqlalchemy.orm import Session, joinedload
 
-from .schema import TenderAnalysis
+from app.modules.analyze.db.schema import TenderAnalysis
 
 class AnalyzeRepository:
     def __init__(self, db: Session):
