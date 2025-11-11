@@ -33,9 +33,9 @@ class TenderRepository:
                 state=scraped_tender.state,
                 location=scraped_tender.city,
                 category=scraped_tender.query.query_name if scraped_tender.query else None,
-                estimated_cost=self._parse_cost(scraped_tender.value),
+                estimated_cost=(scraped_tender.tender_value),
                 submission_deadline=self._parse_date(scraped_tender.last_date_of_bid_submission),
-                portal_url=scraped_tender.tender_url,
+                portal_url=scraped_tender.information_source,
             )
             self.db.add(tender)
             self.db.commit()

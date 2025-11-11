@@ -165,6 +165,8 @@ def scrape_link(link: str, source_priority: str = "normal", skip_dedup_check: bo
 
                     tenders_to_remove = []
                     for tender_data in query_data.tenders:
+                        if query_progress: query_progress.update(1)
+                        if scrape_progress: scrape_progress.update(1)
                         try:
                             # 1. Scrape detail page
                             logger.debug(f"🎯 Scraping detail page for: {tender_data.tender_name}")
@@ -193,9 +195,6 @@ def scrape_link(link: str, source_priority: str = "normal", skip_dedup_check: bo
                             removed_tenders[tender_data.tender_id] = json.loads(
                                 tender_data.model_dump_json(indent=2)
                             )
-                        
-                        if query_progress: query_progress.update(1)
-                        if scrape_progress: scrape_progress.update(1)
 
                     # Remove tenders that failed to scrape/save, so they aren't processed for analysis
                     for tender in tenders_to_remove:
