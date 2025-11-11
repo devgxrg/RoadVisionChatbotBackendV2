@@ -5,6 +5,7 @@ from app.modules.tenderiq.db.schema import Tender
 from app.modules.analyze.repositories import repository as analyze_repo
 
 # TODO: Implement the following function as per requirements
+# ASSIGNED: Dev
 def analyze_tender(db: Session, tdr: str):
     """
     # Description
@@ -20,7 +21,7 @@ def analyze_tender(db: Session, tdr: str):
 
     # Logical details
     1. Get all the details of a tender from both the "tenders" and "scraped_tenders" tables.
-    2. Get a list of all the files associated with this tender (tender_documents)
+    2. Get a list of all the files associated with this tender ("tender_documents" table)
     3. Download files to temporary storage
     4. Extract text from all files
     5. Vectorize and Embed
