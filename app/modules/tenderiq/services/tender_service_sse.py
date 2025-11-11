@@ -31,7 +31,7 @@ def get_daily_tenders_limited(db: Session, start: int, end: int):
 
 def get_daily_tenders_sse(db: Session, start: int, end: int):
     scrape_runs = tenderiq_repo.get_scrape_runs(db)
-    latest_scrape_run = scrape_runs[-1]
+    latest_scrape_run = scrape_runs[0]
     categories_of_current_day = tenderiq_repo.get_all_categories(db, latest_scrape_run)
 
     to_return = DailyTendersResponse(
@@ -51,7 +51,7 @@ def get_daily_tenders_sse(db: Session, start: int, end: int):
     }
 
     for category in categories_of_current_day:
-        batch = 200
+        batch = 100
         while True:
             tenders = tenderiq_repo.get_tenders_from_category(db, category, start, batch)
             if len(tenders) == 0:

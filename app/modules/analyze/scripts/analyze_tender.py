@@ -19,7 +19,7 @@ from app.modules.analyze.models.pydantic_models import (
     ScopeOfWorkSchema,
     DataSheetSchema,
 )
-from app.core.services import llm_model, vector_store, embedding_model
+from app.core.services import llm_model, vector_store, embedding_model, pdf_processor
 
 logger = logging.getLogger(__name__)
 

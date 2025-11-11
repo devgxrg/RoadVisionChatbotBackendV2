@@ -13,6 +13,14 @@ def get_tenders_from_category(db: Session, query: ScrapedTenderQuery, offset: in
         .all()
     )
 
+def get_all_tenders_from_category(db: Session, query: ScrapedTenderQuery) -> List[ScrapedTender]:
+    return (
+        db.query(ScrapedTender)
+        .filter(ScrapedTender.query_id == query.id)
+        .options(joinedload(ScrapedTender.files))
+        .all()
+    )
+
 def get_all_categories(db: Session, scrape_run: ScrapeRun) -> List[ScrapedTenderQuery]:
     return (
         db.query(ScrapedTenderQuery)
