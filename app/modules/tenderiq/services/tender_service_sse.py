@@ -1,7 +1,8 @@
+import json
 from time import sleep
 from sqlalchemy.orm import Session
 from sse_starlette.sse import EventSourceResponse
-from app.modules.tenderiq.models.pydantic_models import DailyTendersResponse
+from app.modules.tenderiq.models.pydantic_models import DailyTendersResponse, Tender
 from app.modules.tenderiq.repositories import repository as tenderiq_repo
 
 def get_daily_tenders_sse(db: Session):
@@ -23,7 +24,7 @@ def get_daily_tenders_sse(db: Session):
 
     yield {
         'event': 'initial_data',
-        'data': to_return
+        'data': to_return.model_dump_json()
     }
 
     for category in categories_of_current_day:
@@ -33,9 +34,11 @@ def get_daily_tenders_sse(db: Session):
             tenders = tenderiq_repo.get_tenders_from_category(db, category, start, batch)
             if len(tenders) == 0:
                 break
+
+            pydantic_tenders = [Tender.model_validate(t).model_dump(mode='json') for t in tenders]
             yield {
                 'event': 'batch',
-                'data': tenders
+                'data': json.dumps(pydantic_tenders)
             }
             start += batch
             sleep(0.5)
