@@ -5,8 +5,7 @@ from sse_starlette.sse import EventSourceResponse
 from app.modules.tenderiq.models.pydantic_models import DailyTendersResponse, Tender
 from app.modules.tenderiq.repositories import repository as tenderiq_repo
 
-def get_daily_tenders_sse(db: Session):
-
+def get_daily_tenders_sse(db: Session, start: int, end: int):
     scrape_runs = tenderiq_repo.get_scrape_runs(db)
     latest_scrape_run = scrape_runs[-1]
     categories_of_current_day = tenderiq_repo.get_all_categories(db, latest_scrape_run)
@@ -28,7 +27,6 @@ def get_daily_tenders_sse(db: Session):
     }
 
     for category in categories_of_current_day:
-        start = 0
         batch = 100
         while True:
             tenders = tenderiq_repo.get_tenders_from_category(db, category, start, batch)
