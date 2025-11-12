@@ -232,7 +232,7 @@ def get_full_tender_details(db: Session, tender_id: UUID) -> Optional[FullTender
                 "created_at": item.get("created_at") or fallback_dt, 
                 
                 # Fields required by the TenderHistory Pydantic model
-                "action": action_value,                                # Uses the string value
+                "action": action_value or "viewed",                                # Uses the string value
                 "notes": item.get("notes") or "",                      # 'notes' (plural) field
                 "timestamp": item.get("created_at") or fallback_dt,    # Timestamp expected as datetime
                 "tdr": item.get("tdr") or "",                       
