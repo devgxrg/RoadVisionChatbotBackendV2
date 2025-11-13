@@ -15,7 +15,7 @@ from datetime import datetime
 
 from app.modules.tenderiq.analyze.tasks import AnalysisTaskProcessor
 from app.modules.tenderiq.analyze.db.repository import AnalyzeRepository
-from app.modules.tenderiq.analyze.db.schema import AnalysisStatusEnum
+from app.modules.analyze.db.schema import AnalysisStatusEnum
 from app.db.database import SessionLocal
 
 

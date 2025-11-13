@@ -8,7 +8,7 @@ def main():
     db = SessionLocal()
     try:
         # tdr_id = "51184451"
-        tdr_id = "52231928"
+        tdr_id = "51702878"
         print(f"🔍 Running analysis for tender {tdr_id}...")
         analyze_tender(db, tdr_id)
         print("✅ Analysis complete")

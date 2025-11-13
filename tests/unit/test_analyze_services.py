@@ -27,7 +27,7 @@ from app.modules.tenderiq.analyze.services.scope_extraction_service import (
 from app.modules.tenderiq.analyze.services.report_generation_service import (
     ReportGenerationService,
 )
-from app.modules.tenderiq.analyze.db.schema import AnalysisStatusEnum
+from app.modules.analyze.db.schema import AnalysisStatusEnum
 from app.modules.tenderiq.analyze.models.pydantic_models import (
     AnalyzeTenderRequest,
 )
@@ -124,7 +124,7 @@ class TestAnalysisService:
         mock_analysis.id = sample_analysis_id
         mock_analysis.tender_id = sample_tender_id
         mock_analysis.user_id = sample_user_id
-        mock_analysis.status = AnalysisStatusEnum.processing
+        mock_analysis.status = AnalysisStatusEnum.analyzing
         mock_analysis.progress = 45
         mock_analysis.current_step = "analyzing-risk"
         mock_analysis.error_message = None
@@ -217,7 +217,7 @@ class TestAnalysisService:
         service = AnalysisService()
 
         mock_analysis = Mock()
-        mock_analysis.status = AnalysisStatusEnum.processing
+        mock_analysis.status = AnalysisStatusEnum.analyzing
         mock_analysis.user_id = sample_user_id
 
         with patch(
