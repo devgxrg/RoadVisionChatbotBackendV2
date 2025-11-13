@@ -1,4 +1,5 @@
 aiohappyeyeballs
+openpyxl
 aiohttp
 aiosignal
 aiosqlite
