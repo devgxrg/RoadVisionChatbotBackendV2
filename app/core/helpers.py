@@ -25,3 +25,10 @@ def get_number_from_currency_string(currency: str) -> float:
     except Exception as e:
         print(e)
         return 0.0
+
+def remove_starting_numbers(text: str) -> str:
+    """
+    Removes starting numbers from a string
+    Example: "1. This is a string" -> "This is a string"
+    """
+    return re.sub(r'^\d+\.', '', text)

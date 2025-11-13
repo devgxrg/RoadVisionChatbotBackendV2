@@ -3,6 +3,8 @@ from bs4 import BeautifulSoup
 
 import requests
 
+from app.core.helpers import remove_starting_numbers
+
 from .data_models import HomePageData, HomePageHeader, Tender, TenderQuery
 
 def scrape_page(url) -> HomePageData:
@@ -100,6 +102,7 @@ def scrape_page(url) -> HomePageData:
             if not title_elem:
                 raise Exception("Title not found")
             title = title_elem.text.strip()
+            title = remove_starting_numbers(title)
 
             state_elem = mainTR.find('p', attrs={'class': 'm-td-state'})
             if not state_elem:
