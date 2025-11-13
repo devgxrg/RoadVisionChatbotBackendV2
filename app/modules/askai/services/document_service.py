@@ -391,7 +391,21 @@ class ExcelProcessor:
             print(f"🔍 Pandas processing for {Path(excel_path).name}...")
             self.update_progress(ProcessingStage.EXTRACTING_CONTENT, 0)
             
-            excel_file = pd.ExcelFile(excel_path)
+            # Check if it's an old .xls file and we need xlrd
+            if excel_path.lower().endswith('.xls'):
+                try:
+                    # Try with xlrd engine for old Excel files
+                    excel_file = pd.ExcelFile(excel_path, engine='xlrd')
+                except ImportError:
+                    print("❌ xlrd not available for .xls files. Install with: pip install xlrd")
+                    return {}
+                except Exception as e:
+                    print(f"❌ xlrd failed to read .xls file: {e}")
+                    return {}
+            else:
+                # Use default engine for .xlsx files
+                excel_file = pd.ExcelFile(excel_path)
+            
             sheet_texts = {}
             
             no_of_sheets = len(excel_file.sheet_names)
@@ -430,6 +444,14 @@ class ExcelProcessor:
             print(f"✅ Pandas extracted {len(sheet_texts)} sheets.")
             return sheet_texts
             
+        except ImportError as e:
+            if "xlrd" in str(e):
+                print(f"❌ Pandas extraction error: {e}")
+                print("💡 For .xls files, install: pip install xlrd")
+            else:
+                print(f"❌ Pandas extraction error: {e}")
+                traceback.print_exc()
+            return {}
         except Exception as e:
             print(f"❌ Pandas extraction error: {e}")
             traceback.print_exc()
@@ -547,15 +569,28 @@ class ExcelProcessor:
         start_time = time.time()
         
         if not self.has_excel_libs:
-            raise Exception("Excel processing libraries not available. Install pandas and openpyxl.")
+            raise Exception("Excel processing libraries not available. Install: pip install pandas openpyxl")
         
+        # Check file extension and provide specific guidance
+        if excel_path.lower().endswith('.xls'):
+            print("📝 Processing old Excel format (.xls) - requires xlrd library")
+        
+        # Extract text from all sheets
         sheet_texts = self.extract_with_pandas(excel_path)
         if not sheet_texts:
             print("⚠️  Pandas extraction failed, attempting OpenPyXL fallback...")
-            sheet_texts = self.extract_with_openpyxl(excel_path)
+            # Only try OpenPyXL for .xlsx files
+            if not excel_path.lower().endswith('.xls'):
+                sheet_texts = self.extract_with_openpyxl(excel_path)
+            else:
+                print("⚠️  OpenPyXL doesn't support .xls files. Please install xlrd or convert to .xlsx")
         
         if not sheet_texts:
-            raise Exception("Failed to extract any data from Excel file")
+            file_ext = Path(excel_path).suffix.lower()
+            if file_ext == '.xls':
+                raise Exception(f"Failed to extract data from {file_ext} file. Please install xlrd: pip install xlrd")
+            else:
+                raise Exception("Failed to extract any data from Excel file")
         
         tables = self.extract_tables(excel_path)
         
