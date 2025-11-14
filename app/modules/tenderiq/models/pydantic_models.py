@@ -4,6 +4,7 @@ from uuid import UUID
 from datetime import datetime
 from enum import Enum
 
+from app.modules.analyze.db.schema import AnalysisStatusEnum
 from app.modules.tenderiq.db.schema import TenderActionEnum
 
 
@@ -117,7 +118,7 @@ class HistoryData(BaseModel):
     due_date: str;
     category: str;
     progress: int;
-    analysis_state: bool;
+    analysis_state: AnalysisStatusEnum;
     synopsis_state: bool;
     evaluated_state: bool;
     # results: "won" | "rejected" | "incomplete" | "pending";

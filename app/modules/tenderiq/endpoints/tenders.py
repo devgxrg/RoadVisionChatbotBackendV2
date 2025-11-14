@@ -180,9 +180,6 @@ def perform_tender_action(
         )
 
 
-# ==================== Date Filtering Endpoints ====================
-
-
 @router.get(
     "/dates",
     response_model=ScrapedDatesResponse,

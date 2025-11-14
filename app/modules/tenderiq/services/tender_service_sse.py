@@ -61,7 +61,6 @@ def get_daily_tenders_sse(db: Session, start: Optional[int] = 0, end: Optional[i
         uuid = run_id if run_id is not None else None
 
     sliced_scrape_runs = scrape_runs[0:upper_limit] if uuid is None else [tenderiq_repo.get_scrape_run_by_id(db, uuid)]
-    print(uuid, sliced_scrape_runs, scrape_runs[0:upper_limit], type(uuid))
     categories_of_current_day: list[ScrapedTenderQuery] = []
     for run in sliced_scrape_runs:
         queries_of_this_run = tenderiq_repo.get_all_categories(db, run)

@@ -16,6 +16,7 @@ from uuid import UUID
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 
+from app.modules.analyze.db.schema import AnalysisStatusEnum
 from app.modules.tenderiq.db.repository import TenderRepository
 from app.modules.tenderiq.db.tenderiq_repository import TenderIQRepository
 from app.modules.tenderiq.models.pydantic_models import (
@@ -29,6 +30,7 @@ from app.modules.tenderiq.models.pydantic_models import (
     DailyTendersResponse,
     ScrapedTenderQuery,
 )
+from app.modules.tenderiq.repositories import analysis as analysis_repo
 
 
 class TenderFilterService:
@@ -49,6 +51,9 @@ class TenderFilterService:
         for tender in wishlist:
             tenders_table = tender.tuple()[0]
             scraped_tender_table = tender.tuple()[1]
+            analysis = analysis_repo.get_analysis_data(db, str(tenders_table.tender_ref_number))
+            if analysis is not None:
+                print(analysis.progress, analysis.tender_id)
             history_data = HistoryData(
                 id=str(tenders_table.id),
                 title=str(tenders_table.tender_title),
@@ -57,8 +62,8 @@ class TenderFilterService:
                 emd=int(self._convert_word_currency_to_number(str(scraped_tender_table.emd))),
                 due_date=str(scraped_tender_table.due_date),
                 category=str(tenders_table.category),
-                progress=0,
-                analysis_state=False,
+                progress=analysis.progress if analysis else 0,
+                analysis_state=analysis.status if analysis else AnalysisStatusEnum.failed,
                 synopsis_state=False,
                 evaluated_state=False,
                 results=HistoryDataResultsEnum.PENDING,
