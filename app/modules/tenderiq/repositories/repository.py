@@ -1,4 +1,5 @@
 from typing import List
+from uuid import UUID
 from sqlalchemy import Float, cast
 from sqlalchemy.orm import Session, joinedload, noload, selectinload
 
@@ -50,3 +51,7 @@ def get_scrape_run_by_id(db: Session, scrape_run_id: str) -> ScrapeRun:
         .filter(ScrapeRun.id == scrape_run_id)
         .first()
     )
+
+def get_scraped_tender(db: Session, tender_id: UUID) -> ScrapedTender:
+    return db.query(ScrapedTender).filter(ScrapedTender.id == tender_id).first()
+

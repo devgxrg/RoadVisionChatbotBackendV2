@@ -1,19 +1,22 @@
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 from bs4 import BeautifulSoup
 
 import requests
+from selenium.webdriver.chrome.webdriver import WebDriver
 
 from app.core.helpers import remove_starting_numbers
 from app.modules.scraper.helpers import clean_text
 
 from .data_models import HomePageData, HomePageHeader, Tender, TenderQuery
 
-def scrape_page(url) -> HomePageData:
-    page = requests.get(url)
-    soup = BeautifulSoup(page.content, 'html.parser')
+def scrape_page(url, driver: WebDriver) -> Optional[HomePageData]:
+    driver.get(url)
+    
+    # page = requests.get(url)
+    soup = BeautifulSoup(driver.page_source, 'html.parser')
 
-    # There are two p-mr-date classes in the page. The first one contains the date, second one contains contact info
-    date_elem = soup.find('p', attrs={'class': 'm-r-date'})
+    # Get the date
+    date_elem = soup.select("body > table:nth-child(1) > tbody > tr > td > table > tbody > tr:nth-child(1) > td > table > tbody > tr > td:nth-child(2) > span:nth-child(2) > span")[0]
     if not date_elem:
         raise Exception("Date not found")
     date = clean_text(date_elem.text)
@@ -21,52 +24,55 @@ def scrape_page(url) -> HomePageData:
     name = "Shubham Kanojia"
     company = "RoadVision AI Pvt. Ltd."
 
-    # For finding the number of new tenders, we need to find the m-main-count element.
-    # This element will contain a string like "{{integer}} New Tenders Related to Your Business
-    # We need to extract the integer from this string.
-    main_count_elem = soup.find('p', attrs={'class': 'm-main-count'})
+    # Get the tender count
+    main_count_elem = soup.select("body > table:nth-child(1) > tbody > tr > td > table > tbody > tr:nth-child(3) > td > table > tbody > tr > td:nth-child(2) > strong > span")[0]
     if not main_count_elem:
         raise Exception("Main count not found")
     main_count = clean_text(main_count_elem.text)
     no_of_new_tenders = main_count.split(' ')[0]
 
     header = HomePageHeader(
-            date=date,
-            name=name,
-            contact=contact,
-            no_of_new_tenders=no_of_new_tenders,
-            company=company
-        )
+        date=date,
+        name=name,
+        contact=contact,
+        no_of_new_tenders=no_of_new_tenders,
+        company=company
+    )
 
-    # The body contains a div of class container-fluid
-    container = soup.find('div', attrs={'class': 'container-fluid'})
-    if not container:
-        raise Exception("Container not found")
-
-    # There are 5 row elements (direct children) in the page.
-    row_elements = container.find_all('div', attrs={'class': 'row'}, recursive=False)
-    if not len(row_elements) == 5:
+    # From the query table, get the query name and number of tenders found
+    query_table_rows = soup.select("body > table:nth-child(1) > tbody > tr > td > table > tbody > tr:nth-child(5) > td > table > tbody > tr")
+    # Remove the first row, which is the header row
+    row_elements = query_table_rows[1:]
+    if not len(row_elements) > 0:
         raise Exception("Row elements not found")
-
-    # The 4th one contains a table with query names and number of tenders.
-    query_names_and_tenders_table = row_elements[3]
-    # Get the table body
-    query_names_and_tenders_table_body = query_names_and_tenders_table.find('tbody')
-    if not query_names_and_tenders_table_body:
-        raise Exception("Table body not found")
-    # There will be a variable numnber of tr elements in this table.
-    table_body_rows = query_names_and_tenders_table_body.find_all('tr', recursive=False)
-    queries_and_numbers: List[Tuple[str, str]] = []
-    for row in table_body_rows:
-        # Each tr element contains 3 td elements.
-        # The first one is query name.
-        # The second one is number of tenders.
-        # Ignore the third one
-        td_elements = row.find_all('td')
-        query_name = td_elements[0].text
-        no_of_tenders = td_elements[1].text
+    # Now each row element has three td's
+    # The first td is the query name
+    # The second td is the number of tenders
+    queries_and_numbers: List[Tuple[str, int]] = []
+    for row in row_elements:
+        row_tds = row.select("td")
+        query_name = clean_text(row_tds[0].text)
+        no_of_tenders = int(clean_text(row_tds[1].text))
         queries_and_numbers.append((query_name, no_of_tenders))
-        print(row)
+
+    # This next table contains a list of tr's
+    # A tr can be of mainTR class or autority-list/authority-list class
+    # Each autority-list item marks the start of a query
+    tenders_list_list: List[List[Tender]] = []
+    main_table = soup.select("body > table:nth-child(2) > tbody > tr > td > table > tbody > tr:nth-child(2) > td > table")
+    if not len(main_table) == 1:
+        raise Exception("Main table not found")
+    main_table_rows = main_table[0].find_all('tr')
+    # Remove the first row, which is the header row
+    maintr_count = 0
+    curr_query: List[Tender] = []
+    for row in main_table_rows:
+        if row.has_attr('class') and row['class'][0] == 'autority-list':
+            maintr_count = 0
+            curr_query = []
+        elif row.has_attr('class') and row['class'][0] == 'mainTR':
+            continue
+
 
     # The last one is the list of queries, and their 
     # children tables are tender datas.
@@ -83,7 +89,6 @@ def scrape_page(url) -> HomePageData:
     if not len(queries_and_numbers) == len(col_md_12_elements):
         raise Exception("Queries and col-md-12 elements do not correspond")
 
-    tenders_list_list: List[List[Tender]] = []
 
     for column in col_md_12_elements:
         tender_query_list: List[Tender] = []

@@ -26,11 +26,14 @@ from app.modules.tenderiq.models.pydantic_models import (
     HistoryData,
     HistoryDataResultsEnum,
     ScrapeDateInfo,
+    ScrapedTenderRead,
     Tender,
     DailyTendersResponse,
     ScrapedTenderQuery,
+    TenderAnalysisRead,
 )
 from app.modules.tenderiq.repositories import analysis as analysis_repo
+from app.modules.tenderiq.repositories import repository as tender_repo
 
 
 class TenderFilterService:
@@ -67,6 +70,8 @@ class TenderFilterService:
                 synopsis_state=False,
                 evaluated_state=False,
                 results=HistoryDataResultsEnum.PENDING,
+                analysis_details=TenderAnalysisRead.model_validate(analysis) if analysis else None,
+                full_scraped_details=ScrapedTenderRead.model_validate(scraped_tender_table) if scraped_tender_table else None
             )
             history_data_list.append(history_data)
 

@@ -4,7 +4,9 @@ from uuid import UUID
 from datetime import datetime
 from enum import Enum
 
-from app.modules.analyze.db.schema import AnalysisStatusEnum
+from app.modules.analyze.db.schema import AnalysisStatusEnum, TenderAnalysis
+from app.modules.analyze.models.pydantic_models import DataSheetSchema, OnePagerSchema, ScopeOfWorkSchema
+from app.modules.scraper.db.schema import ScrapedTender
 from app.modules.tenderiq.db.schema import TenderActionEnum
 
 
@@ -103,6 +105,90 @@ class TenderActionRequest(BaseModel):
     payload: Optional[TenderActionPayload] = None
 
 # ==================== Response Models - History And Wishlist ====================
+class ScrapedTenderRead(BaseModel):
+    id: UUID
+
+    # From Tender model
+    tender_id_str: str
+    tender_name: str
+    tender_url: str
+    dms_folder_id: Optional[UUID] = None
+    city: str
+    summary: str
+    value: str
+    due_date: str
+
+    analysis_status: Optional[str] = None
+    error_message: Optional[str] = None
+
+    query_id: UUID
+
+    # From TenderDetailPage models
+    # TenderDetailNotice
+    tdr: str
+    tendering_authority: str
+    tender_no: str
+    tender_id_detail: str
+    tender_brief: str
+    # city is already there from Tender model
+    state: str
+    document_fees: str
+    emd: str
+    tender_value: str
+    tender_type: str
+    bidding_type: str
+    competition_type: str
+
+    # TenderDetailDetails
+    tender_details: str
+
+    # TenderDetailKeyDates
+    publish_date: str
+    last_date_of_bid_submission: str
+    tender_opening_date: str
+
+    # TenderDetailContactInformation
+    company_name: str
+    contact_person: str
+    address: str
+
+    # TenderDetailOtherDetail
+    information_source: str
+    class Config:
+        from_attributes = True
+
+class TenderAnalysisRead(BaseModel):
+    """
+    Central table to track the analysis of a single tender.
+    Maintains a one-to-one relationship with a ScrapedTender.
+    """
+    id: UUID
+    
+    # One-to-one relationship to the ScrapedTender being analyzed. This refers to scraped_tenders.tender_id_str.
+    tender_id: str
+    user_id: Optional[UUID] = None
+    chat_id: Optional[UUID] = None
+    
+    # Analysis metadata
+    status: AnalysisStatusEnum
+    progress: int
+    status_message: Optional[str] = None
+    error_message: Optional[str] = None
+    
+    # Timestamps
+    created_at: datetime
+    updated_at: datetime
+    analysis_started_at: datetime
+    analysis_completed_at: datetime
+    
+    # Analysis Results - JSON columns (untyped to avoid circular imports)
+    one_pager_json: OnePagerSchema
+    scope_of_work_json: ScopeOfWorkSchema
+    data_sheet_json: DataSheetSchema
+
+    class Config:
+        from_attributes = True
+
 class HistoryDataResultsEnum(str, Enum):
     WON = "won"
     REJECTED = "rejected"
@@ -123,6 +209,8 @@ class HistoryData(BaseModel):
     evaluated_state: bool;
     # results: "won" | "rejected" | "incomplete" | "pending";
     results: HistoryDataResultsEnum;
+    full_scraped_details: Optional[ScrapedTenderRead] = None
+    analysis_details: Optional[TenderAnalysisRead] = None
 
 
 class HistoryAndWishlistResponse(BaseModel):

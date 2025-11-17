@@ -76,7 +76,6 @@ def orm_to_dict(obj, visited=None):
         return obj._value_
     return obj
 
-
 def get_full_tender_details(db: Session, tender_id: UUID) -> Optional[FullTenderDetails]:
     # Get ScrapedTender with files and query relationship joined if exists
     scraped_tender = db.query(ScrapedTender).options(
