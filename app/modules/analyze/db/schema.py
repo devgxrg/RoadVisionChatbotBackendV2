@@ -49,6 +49,7 @@ class TenderAnalysis(Base):
     one_pager_json: Mapped[Optional[dict]] = mapped_column(JSON)
     scope_of_work_json: Mapped[Optional[dict]] = mapped_column(JSON)
     data_sheet_json: Mapped[Optional[dict]] = mapped_column(JSON)
+    bid_synopsis_json: Mapped[Optional[dict]] = mapped_column(JSON)  # Generated qualification criteria
 
     # Relationships
     rfp_sections: Mapped[List["AnalysisRFPSection"]] = relationship(back_populates="analysis", cascade="all, delete-orphan")
