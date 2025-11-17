@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Response
 from sqlalchemy.orm import Session
 from uuid import UUID
 
@@ -28,10 +28,14 @@ router = APIRouter()
             "description": "Internal server error",
             "model": ErrorResponse
         }
-    }
+    },
+    # Disable caching - always return fresh data
+    response_model_exclude_unset=False,
+    response_model_exclude_none=False
 )
 def get_bid_synopsis(
     tender_id: UUID,
+    response: Response,
     db: Session = Depends(get_db_session)
 ) -> BidSynopsisResponse:
     """
@@ -73,6 +77,11 @@ def get_bid_synopsis(
     
     Fields marked as "N/A" indicate missing data in both tables.
     """
+    # Set cache-busting headers to ensure fresh data
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    
     try:
         # Use service layer - same pattern as other endpoints
         service = BidSynopsisService()

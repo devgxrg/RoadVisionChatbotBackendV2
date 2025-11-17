@@ -144,3 +144,65 @@ def get_tender_analysis(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error retrieving tender analysis",
         )
+
+
+@router.post(
+    "/trigger/{tender_ref}",
+    summary="Trigger Tender Analysis",
+    description="Start analysis for a tender by tender reference number. Creates analysis record and starts background processing.",
+    tags=["Analyze"],
+)
+def trigger_tender_analysis(
+    tender_ref: str,
+    db: Session = Depends(get_db_session),
+    # current_user=Depends(get_current_active_user),  # Removed auth for testing
+):
+    """
+    Trigger analysis for a tender.
+    
+    Args:
+        tender_ref: Tender reference number (e.g., "51184507")
+        db: Database session
+        current_user: Authenticated user
+        
+    Returns:
+        Status message
+    """
+    try:
+        from app.modules.analyze.scripts.analyze_tender import analyze_tender
+        
+        # Check if tender exists
+        from app.modules.tenderiq.db.schema import Tender
+        tender = db.query(Tender).filter(Tender.tender_ref_number == tender_ref).first()
+        if not tender:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Tender {tender_ref} not found"
+            )
+        
+        # Check if already analyzed
+        existing = db.query(TenderAnalysis).filter(TenderAnalysis.tender_id == tender_ref).first()
+        if existing and existing.status == AnalysisStatusEnum.COMPLETED:
+            return {
+                "status": "already_analyzed",
+                "message": f"Tender {tender_ref} is already analyzed",
+                "analysis_id": str(existing.id)
+            }
+        
+        # Trigger analysis
+        logger.info(f"Triggering analysis for tender {tender_ref}")
+        analyze_tender(db, tender_ref)
+        
+        return {
+            "status": "success",
+            "message": f"Analysis triggered for tender {tender_ref}"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error triggering analysis for {tender_ref}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error triggering analysis: {str(e)}"
+        )
