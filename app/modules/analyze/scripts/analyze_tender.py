@@ -467,6 +467,26 @@ def analyze_tender(db: Session, tdr: str):
         logger.info(f"[{tdr}] Extracted {len(doc_templates)} document templates")
 
         # ====================================================================
+        # STEP 5.3: GENERATE AND SAVE BID SYNOPSIS
+        # ====================================================================
+        analysis.status_message = "Generating bid synopsis"
+        db.commit()
+        
+        try:
+            from app.modules.bidsynopsis.bid_synopsis_generator import generate_and_save_bid_synopsis
+            
+            # Get scraped tender (ScrapedTender already imported at module level)
+            scraped_tender_for_synopsis = db.query(ScrapedTender).filter_by(tender_id_str=analysis.tender_id).first()
+            
+            # Generate and save bid synopsis
+            import asyncio
+            bid_synopsis = asyncio.run(generate_and_save_bid_synopsis(analysis, scraped_tender_for_synopsis, db))
+            logger.info(f"[{tdr}] Generated bid synopsis with {len(bid_synopsis.get('qualification_criteria', []))} criteria")
+        except Exception as bid_error:
+            logger.warning(f"[{tdr}] Failed to generate bid synopsis: {bid_error}")
+            # Don't fail the entire analysis if bid synopsis generation fails
+
+        # ====================================================================
         # STEP 6: MARK ANALYSIS AS COMPLETE
         # ====================================================================
         analysis.status = AnalysisStatusEnum.completed
