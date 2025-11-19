@@ -7,6 +7,11 @@ import traceback
 import time
 from pathlib import Path
 from enum import Enum
+import logging
+import shutil
+from uuid import uuid4
+
+logger = logging.getLogger(__name__)
 
 # PDF Processing
 try:
