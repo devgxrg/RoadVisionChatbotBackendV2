@@ -9,6 +9,8 @@ from app.modules.scraper.db.schema import ScrapedTender
 from app.modules.tenderiq.db.schema import Tender
 from app.modules.tenderiq.models.pydantic_models import DailyTendersResponse, FullTenderDetails, Tender as TenderModel
 from app.modules.tenderiq.repositories import repository as tenderiq_repo
+# REMOVED: Lazy import corrigendum service only when needed
+# from app.modules.tenderiq.services.corrigendum_service import CorrigendumTrackingService
 
 
 # --- NEW HELPER FUNCTION ---
@@ -179,86 +181,125 @@ def get_full_tender_details(db: Session, tender_id: UUID) -> Optional[FullTender
     if "history" in combined and combined["history"]:
         new_history = []
         for item in combined["history"]:
-            
-            fallback_dt = datetime.utcnow().replace(tzinfo=timezone.utc)
-            
-            # FIX: Robustly extract action as a simple string
-            action_value = item.get("action")
-            
-            if isinstance(action_value, dict) and '_value_' in action_value:
-                 action_value = action_value['_value_']
-            elif hasattr(action_value, '_value_'):
-                action_value = action_value._value_
-            elif action_value is None or not isinstance(action_value, str):
-                action_value = "viewed"
-            
-            # Fix: tender_history.0.type Enum Mismatch (default to "other")
-            history_type = item.get("type")
-            if history_type not in ['due_date_extension', 'bid_deadline_extension', 'corrigendum', 'amendment', 'other']:
-                 history_type = "other"
-            
-            # Fix: tender_history.0.update_date requires a string
-            update_date_dt = item.get("created_at") or fallback_dt
-            update_date_value = update_date_dt.isoformat() if isinstance(update_date_dt, datetime) else str(update_date_dt)
-
-
-            # Fix: tender_history.0.files_changed requires a list
-            files_changed_value = item.get("files_changed")
-            if not isinstance(files_changed_value, list):
-                files_changed_value = []
+            try:
+                fallback_dt = datetime.utcnow().replace(tzinfo=timezone.utc)
                 
-            # FIX: date_change.from_date/to_date require strings
-            date_change_value = item.get("date_change")
-            if not isinstance(date_change_value, dict):
-                 date_change_value = {}
-
-            # FIX: Convert the sentinel datetime to an ISO string for date_change sub-fields
-            sentinel_date_str = datetime.min.replace(tzinfo=timezone.utc).isoformat()
-            
-            # Ensure the required sub-fields are present and converted to string
-            date_change_value["from_date"] = (
-                date_change_value.get("from_date").isoformat()
-                if isinstance(date_change_value.get("from_date"), datetime)
-                else sentinel_date_str
-            )
-            date_change_value["to_date"] = (
-                date_change_value.get("to_date").isoformat()
-                if isinstance(date_change_value.get("to_date"), datetime)
-                else sentinel_date_str
-            )
-
-            history_item_data = {
-                # Map standard/simple fields
-                "id": str(item.get("id")) if item.get("id") else None,
-                "tender_id": str(item.get("tender_id")) if item.get("tender_id") else None,
-                "user_id": str(item.get("user_id")) if item.get("user_id") else None,
-                "created_at": item.get("created_at") or fallback_dt, 
+                # FIX: Robustly extract action as a simple string
+                action_value = item.get("action")
                 
-                # Fields required by the TenderHistory Pydantic model
-                "action": action_value or "viewed",                                # Uses the string value
-                "notes": item.get("notes") or "",                      # 'notes' (plural) field
-                "timestamp": item.get("created_at") or fallback_dt,    # Timestamp expected as datetime
-                "tdr": item.get("tdr") or "",                       
-                "type": history_type,
-                "note": item.get("notes") or "",
-                "update_date": update_date_value,                      # Expected as string
-                "files_changed": files_changed_value,               
-                "date_change": date_change_value,                      # Contains string dates
-            }
-            new_history.append(history_item_data)
+                if isinstance(action_value, dict) and '_value_' in action_value:
+                     action_value = action_value['_value_']
+                elif hasattr(action_value, '_value_'):
+                    action_value = action_value._value_
+                elif action_value is None or not isinstance(action_value, str):
+                    action_value = "viewed"
+                
+                # Fix: tender_history.0.type Enum Mismatch (default to "other")
+                history_type = item.get("type")
+                if history_type not in ['due_date_extension', 'bid_deadline_extension', 'corrigendum', 'amendment', 'other']:
+                     history_type = "other"
+                
+                # Fix: tender_history.0.update_date requires a string
+                update_date_dt = item.get("created_at") or fallback_dt
+                update_date_value = update_date_dt.isoformat() if isinstance(update_date_dt, datetime) else str(update_date_dt)
+
+
+                # Fix: tender_history.0.files_changed requires a list
+                files_changed_value = item.get("files_changed")
+                if not isinstance(files_changed_value, list):
+                    files_changed_value = []
+                    
+                # FIX: date_change.from_date/to_date require strings
+                date_change_value = item.get("date_change")
+                if not isinstance(date_change_value, dict):
+                     date_change_value = {}
+
+                # FIX: Convert the sentinel datetime to an ISO string for date_change sub-fields
+                sentinel_date_str = datetime.min.replace(tzinfo=timezone.utc).isoformat()
+                
+                # Ensure the required sub-fields are present and converted to string
+                from_date_raw = date_change_value.get("from_date")
+                to_date_raw = date_change_value.get("to_date")
+                
+                # Handle from_date - could be datetime, string, or None
+                if isinstance(from_date_raw, datetime):
+                    date_change_value["from_date"] = from_date_raw.isoformat()
+                elif isinstance(from_date_raw, str) and from_date_raw:
+                    date_change_value["from_date"] = from_date_raw
+                else:
+                    date_change_value["from_date"] = sentinel_date_str
+                
+                # Handle to_date - could be datetime, string, or None
+                if isinstance(to_date_raw, datetime):
+                    date_change_value["to_date"] = to_date_raw.isoformat()
+                elif isinstance(to_date_raw, str) and to_date_raw:
+                    date_change_value["to_date"] = to_date_raw
+                else:
+                    date_change_value["to_date"] = sentinel_date_str
+
+                history_item_data = {
+                    # Map standard/simple fields
+                    "id": str(item.get("id")) if item.get("id") else None,
+                    "tender_id": str(item.get("tender_id")) if item.get("tender_id") else None,
+                    "user_id": str(item.get("user_id")) if item.get("user_id") else None,
+                    "created_at": item.get("created_at") or fallback_dt, 
+                    
+                    # Fields required by the TenderHistory Pydantic model
+                    "action": action_value or "viewed",                                # Uses the string value
+                    "notes": item.get("notes") or "",                      # 'notes' (plural) field
+                    "timestamp": item.get("created_at") or fallback_dt,    # Timestamp expected as datetime
+                    "tdr": tender.tender_ref_number or "",                # Add tender reference number
+                    "type": history_type,
+                    "note": item.get("notes") or item.get("note") or "",
+                    "update_date": update_date_value,                      # Expected as string
+                    "files_changed": files_changed_value,               
+                    "date_change": date_change_value,                      # Contains string dates
+                }
+                new_history.append(history_item_data)
+            except Exception as e:
+                print(f"Error processing history item: {str(e)}")
+                import traceback
+                traceback.print_exc()
+                continue
         
         combined["history"] = new_history
         combined["tender_history"] = new_history 
     else:
         combined["tender_history"] = []
         combined["history"] = []
+    
+    # Add corrigendum history from TenderActionHistory
+    try:
+        # Lazy import to avoid slowing down startup
+        from app.modules.tenderiq.services.corrigendum_service import CorrigendumTrackingService
+        
+        corrigendum_service = CorrigendumTrackingService(db)
+        corrigendum_history = corrigendum_service.get_tender_change_history(str(tender.id))
+        
+        # Merge corrigendum history with existing tender history
+        if corrigendum_history:
+            # Remove corrigendum_updated items from tender_history to avoid duplicates
+            # (they'll be replaced with properly formatted ones from corrigendum service)
+            combined["tender_history"] = [
+                h for h in combined["tender_history"] 
+                if not (h.get("note", "").startswith("Corrigendum:"))
+            ]
+            
+            # Add to tender_history (shown in frontend)
+            combined["tender_history"].extend(corrigendum_history)
+            
+            # Sort by update_date descending (most recent first)
+            combined["tender_history"] = sorted(
+                combined["tender_history"],
+                key=lambda x: x.get("update_date", ""),
+                reverse=True
+            )
+    except Exception as e:
+        # Log error but don't fail the entire request
+        pass
 
-    # HACK: Remove the 'history' item if the "action" is empty
-    for item in combined["history"]:
-        if item["action"] == None:
-            combined["history"].remove(item)
-
-    print(combined["history"])
+    # HACK: Remove the 'history' item if the "action" is empty (only for tender_action_history, not corrigendum)
+    combined["history"] = [item for item in combined["history"] if item.get("action") is not None]
 
     # Validate the modified dictionary
     return FullTenderDetails.model_validate(combined)

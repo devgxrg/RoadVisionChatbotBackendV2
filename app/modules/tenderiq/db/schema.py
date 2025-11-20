@@ -102,6 +102,7 @@ class TenderActionEnum(str, enum.Enum):
     shortlisted = "shortlisted"
     accepted = "accepted"
     rejected = "rejected"
+    corrigendum_updated = "corrigendum_updated"
 
 
 class TenderActionHistory(Base):
