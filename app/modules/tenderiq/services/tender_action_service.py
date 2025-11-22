@@ -2,14 +2,20 @@
 Service for performing actions on tenders.
 """
 import uuid
+import logging
 from typing import Optional
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
+import threading
 
 from app.modules.tenderiq.db.tenderiq_repository import TenderIQRepository
 from app.modules.tenderiq.db.repository import TenderRepository
 from app.modules.tenderiq.models.pydantic_models import TenderActionRequest, TenderActionType
 from app.modules.tenderiq.db.schema import Tender, TenderActionEnum
+from app.modules.analyze.scripts.analyze_tender import analyze_tender
+from app.db.database import SessionLocal
+
+logger = logging.getLogger(__name__)
 
 class TenderActionService:
     def __init__(self, db: Session):
@@ -31,7 +37,27 @@ class TenderActionService:
         if request.action == TenderActionType.TOGGLE_WISHLIST:
             updates['is_wishlisted'] = not tender.is_wishlisted
             action_to_log = TenderActionEnum.wishlisted if updates['is_wishlisted'] else TenderActionEnum.unwishlisted
-        
+
+            # If tender is being wishlisted, trigger analysis in background
+            if updates['is_wishlisted']:
+                tender_ref = scraped_tender.tender_id_str
+                logger.info(f"Triggering analysis for wishlisted tender: {tender_ref}")
+
+                # Run analysis in background thread to avoid blocking the request
+                def run_analysis():
+                    analysis_db = SessionLocal()
+                    try:
+                        analyze_tender(analysis_db, tender_ref)
+                        logger.info(f"Analysis completed for tender: {tender_ref}")
+                    except Exception as e:
+                        logger.error(f"Background analysis failed for {tender_ref}: {e}")
+                    finally:
+                        analysis_db.close()
+
+                thread = threading.Thread(target=run_analysis, daemon=True)
+                thread.start()
+                logger.info(f"Analysis triggered in background for tender: {tender_ref}")
+
         elif request.action == TenderActionType.TOGGLE_FAVORITE:
             updates['is_favorite'] = not tender.is_favorite
 
@@ -58,6 +84,14 @@ class TenderActionService:
             updated_tender = tender
 
         if action_to_log:
-            self.tender_repo.log_action(updated_tender.id, user_id, action_to_log, notes)
-        
+            try:
+                self.tender_repo.log_action(updated_tender.id, user_id, action_to_log, notes)
+            except Exception as e:
+                # Log the error but don't fail the action
+                # This handles cases where user_id doesn't exist or other logging issues
+                logger.warning(
+                    f"Failed to log action {action_to_log} for tender {updated_tender.id} "
+                    f"by user {user_id}: {str(e)}"
+                )
+
         return updated_tender

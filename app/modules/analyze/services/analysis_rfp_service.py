@@ -19,6 +19,26 @@ def get_rfp_sections(db: Session, analysis_id: UUID) -> RFPSectionsResponseSchem
     for section in analysis_rfp_sections:
         print(section.compliance_issues)
 
+    def _normalize_page_references(page_refs):
+        """Convert page references to list of integers, filtering out non-numeric values."""
+        if not page_refs:
+            return []
+
+        normalized = []
+        for ref in page_refs:
+            try:
+                # Try to convert to int
+                if isinstance(ref, int):
+                    normalized.append(ref)
+                elif isinstance(ref, str):
+                    # Try to parse string as int
+                    normalized.append(int(ref))
+            except (ValueError, TypeError):
+                # Skip non-numeric values
+                continue
+
+        return normalized
+
     return RFPSectionsResponseSchema(
         rfp_summary=rfp_summary,
         sections=[
@@ -28,7 +48,7 @@ def get_rfp_sections(db: Session, analysis_id: UUID) -> RFPSectionsResponseSchem
                 summary=section.summary or "",
                 key_requirements=section.key_requirements or [],
                 compliance_issues=[str(item) for item in section.compliance_issues] if section.compliance_issues else [],
-                page_references=section.page_references or []
+                page_references=_normalize_page_references(section.page_references)
             ) for section in analysis_rfp_sections
         ]
     )

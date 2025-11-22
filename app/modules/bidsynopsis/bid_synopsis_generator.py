@@ -23,37 +23,41 @@ async def generate_and_save_bid_synopsis(
     """
     try:
         # Query Weaviate for detailed eligibility/qualification content
-        from app.core.services import vector_store
-        if not vector_store or not vector_store.client:
-            raise Exception("Weaviate client not initialized")
+        from app.core.services import get_vector_store
+        vector_store = get_vector_store()
+
         weaviate_content = []
-        
-        try:
-            # Search for eligibility, qualification, and financial requirement content
-            search_queries = [
-                "eligibility criteria requirements conditions",
-                "qualification financial capacity turnover",
-                "enlistment registration class category",
-                "EMD earnest money deposit bid security",
-                "performance guarantee bank guarantee",
-                "similar work experience past projects"
-            ]
-            
-            for query in search_queries:
-                results = vector_store.similarity_search(
-                    collection_name=f"Tender_{analysis.tender_id}",
-                    query_text=query,
-                    limit=5
-                )
-                for result in results:
-                    # result is a tuple: (doc_content, properties, similarity)
-                    doc_content, properties, similarity = result
-                    if doc_content and len(doc_content) > 100:  # Only include substantial content
-                        weaviate_content.append(doc_content)
-            
-            print(f"📚 Retrieved {len(weaviate_content)} detailed chunks from Weaviate")
-        except Exception as weaviate_error:
-            print(f"⚠️ Could not fetch from Weaviate: {weaviate_error}")
+
+        if not vector_store or not vector_store.client:
+            print("⚠️ Weaviate client not initialized, proceeding without vector search")
+            # Continue without Weaviate data - we can still generate synopsis from analysis data
+        else:
+            try:
+                # Search for eligibility, qualification, and financial requirement content
+                search_queries = [
+                    "eligibility criteria requirements conditions",
+                    "qualification financial capacity turnover",
+                    "enlistment registration class category",
+                    "EMD earnest money deposit bid security",
+                    "performance guarantee bank guarantee",
+                    "similar work experience past projects"
+                ]
+
+                for query in search_queries:
+                    results = vector_store.similarity_search(
+                        collection_name=f"Tender_{analysis.tender_id}",
+                        query_text=query,
+                        limit=5
+                    )
+                    for result in results:
+                        # result is a tuple: (doc_content, properties, similarity)
+                        doc_content, properties, similarity = result
+                        if doc_content and len(doc_content) > 100:  # Only include substantial content
+                            weaviate_content.append(doc_content)
+
+                print(f"📚 Retrieved {len(weaviate_content)} detailed chunks from Weaviate")
+            except Exception as weaviate_error:
+                print(f"⚠️ Could not fetch from Weaviate: {weaviate_error}")
         
         # Collect ALL available tender data
         tender_data = {
@@ -141,21 +145,89 @@ AVOID DUPLICATES:
 - If you see multiple mentions of turnover, include only ONE turnover entry with ALL details combined
 - Combine similar requirements into single comprehensive entry
 
+CRITICAL JSON FORMATTING:
+- ALL string values MUST properly escape special characters
+- Use \\n for newlines, \\" for quotes, \\\\ for backslashes
+- Ensure ALL strings are properly terminated with closing quotes
+- Do NOT include literal newlines or unescaped quotes in strings
+- Test that your JSON is valid before responding
+
 Return valid JSON array with DETAILED requirements (remember: MINIMUM 100 words per requirement).
 """
 
         # Call LLM
         response = llm.invoke(prompt)
         response_text = response.content if hasattr(response, 'content') else str(response)
-        
-        # Extract JSON from response
+
+        # Extract JSON from response with better handling
         if '```json' in response_text:
             response_text = response_text.split('```json')[1].split('```')[0].strip()
         elif '```' in response_text:
             response_text = response_text.split('```')[1].split('```')[0].strip()
-        
-        # Parse LLM response
-        qualification_criteria = json.loads(response_text)
+
+        # Try to find JSON array if extraction failed
+        if not response_text.startswith('['):
+            # Look for a JSON array in the response
+            import re
+            json_match = re.search(r'\[[\s\S]*\]', response_text)
+            if json_match:
+                response_text = json_match.group(0)
+
+        # Helper function to fix common JSON issues
+        def fix_json_string(text):
+            """Fix common JSON formatting issues."""
+            import re
+
+            # Try to fix unterminated strings by finding the problematic section
+            # This is a heuristic approach - look for unescaped newlines in string values
+
+            # Strategy: Parse char by char and track if we're inside a string
+            fixed = []
+            in_string = False
+            escape_next = False
+
+            for i, char in enumerate(text):
+                if escape_next:
+                    fixed.append(char)
+                    escape_next = False
+                    continue
+
+                if char == '\\':
+                    escape_next = True
+                    fixed.append(char)
+                    continue
+
+                if char == '"':
+                    in_string = not in_string
+                    fixed.append(char)
+                elif char == '\n' and in_string:
+                    # Escape unescaped newlines inside strings
+                    fixed.append('\\n')
+                elif char == '\r' and in_string:
+                    # Skip carriage returns inside strings
+                    continue
+                elif char == '\t' and in_string:
+                    # Escape tabs inside strings
+                    fixed.append('\\t')
+                else:
+                    fixed.append(char)
+
+            return ''.join(fixed)
+
+        # Parse LLM response with better error handling
+        try:
+            qualification_criteria = json.loads(response_text)
+        except json.JSONDecodeError as e:
+            print(f"⚠️ JSON parsing error at position {e.pos}: {e.msg}")
+            print(f"Response text (first 500 chars): {response_text[:500]}")
+            # Try to fix common JSON issues
+            try:
+                fixed_text = fix_json_string(response_text)
+                qualification_criteria = json.loads(fixed_text)
+                print("✅ Fixed JSON by escaping special characters")
+            except Exception as fix_error:
+                print(f"❌ Could not fix JSON ({fix_error}), returning empty criteria")
+                qualification_criteria = []
         
         # AGGRESSIVE deduplication and cleanup
         seen_types = {}
