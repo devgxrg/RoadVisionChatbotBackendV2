@@ -763,6 +763,58 @@ def scrape_link(link: str, source_priority: str = "normal", skip_dedup_check: bo
                                                 changes = corrigendum_service.detect_changes(tender_ref, scraped_tender_orm)
                                                 if changes:
                                                     logger.info(f"🔔 CORRIGENDUM DETECTED for {tender_ref}: {len(changes)} changes")
+                                                    
+                                                    # Add detected corrigendum to document_changes_json so it appears in frontend
+                                                    from app.modules.scraper.data_models import TenderDocumentChanges, TenderHistoryItem
+                                                    from datetime import timezone
+                                                    
+                                                    # Format changes into a note
+                                                    change_note_parts = [f"Corrigendum detected: {len(changes)} changes"]
+                                                    for change in changes:
+                                                        field_label = corrigendum_service.FIELD_LABELS.get(change.field, change.field)
+                                                        old_val = str(change.old_value) if change.old_value else "Not set"
+                                                        new_val = str(change.new_value) if change.new_value else "Removed"
+                                                        change_note_parts.append(f"• {field_label}: {old_val} → {new_val}")
+                                                    
+                                                    # Determine history type
+                                                    history_type = "corrigendum"
+                                                    date_change = None
+                                                    for change in changes:
+                                                        if change.field in ['submission_deadline', 'due_date', 'last_date_of_bid_submission']:
+                                                            history_type = "bid_deadline_extension"
+                                                            if change.old_value and change.new_value:
+                                                                date_change = {
+                                                                    "from_date": str(change.old_value),
+                                                                    "to_date": str(change.new_value)
+                                                                }
+                                                            break
+                                                    
+                                                    # Create history item
+                                                    history_item = TenderHistoryItem(
+                                                        id=None,
+                                                        type=history_type,
+                                                        note="\n".join(change_note_parts),
+                                                        update_date=datetime.now(timezone.utc).isoformat(),
+                                                        files_changed=[],
+                                                        date_change_from=date_change["from_date"] if date_change else None,
+                                                        date_change_to=date_change["to_date"] if date_change else None
+                                                    )
+                                                    
+                                                    # Get or create document_changes_json
+                                                    if scraped_tender_orm.document_changes_json:
+                                                        try:
+                                                            existing_items = scraped_tender_orm.document_changes_json.get('items', [])
+                                                        except:
+                                                            existing_items = []
+                                                    else:
+                                                        existing_items = []
+                                                    
+                                                    # Add new item to the list
+                                                    existing_items.append(history_item.model_dump())
+                                                    
+                                                    # Update document_changes_json
+                                                    scraped_tender_orm.document_changes_json = {"items": existing_items}
+                                                    logger.info(f"✅ Added corrigendum to document_changes_json for {tender_ref}")
                                                 else:
                                                     logger.debug(f"   ✓ No changes detected")
                                     else:

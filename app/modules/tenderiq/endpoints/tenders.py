@@ -124,6 +124,56 @@ def get_daily_tenders_bulk(
     return tender_service_sse.get_daily_tenders_bulk(db, run_id)
 
 @router.get(
+    "/tenders/by-tdr/{tdr}",
+    response_model=Tender,
+    tags=["TenderIQ"],
+    summary="Get tender by TDR (tender reference number)",
+)
+def get_tender_by_tdr(
+    tdr: str,
+    db: Session = Depends(get_db_session)
+):
+    """
+    Find and retrieve a tender by its TDR (tender reference number).
+    Useful for searching tenders by their tender number.
+    """
+    from app.modules.tenderiq.db.schema import Tender as TenderModel
+    from app.modules.scraper.db.schema import ScrapedTender
+    from sqlalchemy.orm import joinedload
+    
+    # Try to find in ScrapedTender first (most common)
+    scraped_tender = db.query(ScrapedTender).options(
+        joinedload(ScrapedTender.files),
+        joinedload(ScrapedTender.query)
+    ).filter(
+        ScrapedTender.tdr == tdr
+    ).order_by(
+        ScrapedTender.scraped_at.desc() if hasattr(ScrapedTender, 'scraped_at') else ScrapedTender.id.desc()
+    ).first()
+    
+    if scraped_tender:
+        service = TenderFilterService()
+        tender_details = service.get_tender_details(db, scraped_tender.id)
+        if tender_details:
+            return tender_details
+    
+    # Try to find in Tender table
+    tender = db.query(TenderModel).filter(
+        TenderModel.tender_ref_number == tdr
+    ).first()
+    
+    if tender:
+        service = TenderFilterService()
+        tender_details = service.get_tender_details(db, tender.id)
+        if tender_details:
+            return tender_details
+    
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=f"Tender with TDR '{tdr}' not found.",
+    )
+
+@router.get(
     "/tenders/{tender_id}",
     response_model=Tender,
     tags=["TenderIQ"],

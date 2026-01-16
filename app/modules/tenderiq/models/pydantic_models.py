@@ -98,6 +98,14 @@ class Tender(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+    @field_validator('city', 'state', mode='before')
+    @classmethod
+    def format_location_fields(cls, v):
+        """Ensure city and state are properly capitalized (title case)"""
+        if v and isinstance(v, str):
+            return v.title()
+        return v
+
     @field_validator("publish_date", "due_date", "last_date_of_bid_submission", "tender_opening_date", mode="before")
     @classmethod
     def normalize_dates(cls, v: Optional[str]) -> Optional[str]:
@@ -224,8 +232,16 @@ class ScrapedTenderRead(BaseModel):
 
     # TenderDetailOtherDetail
     information_source: str
-    class Config:
-        from_attributes = True
+    
+    @field_validator('city', 'state', mode='before')
+    @classmethod
+    def format_location_fields(cls, v):
+        """Ensure city and state are properly capitalized (title case)"""
+        if v and isinstance(v, str):
+            return v.title()
+        return v
+    
+    model_config = ConfigDict(from_attributes=True)
 
 class TenderAnalysisRead(BaseModel):
     """
@@ -256,8 +272,7 @@ class TenderAnalysisRead(BaseModel):
     scope_of_work_json: Optional[ScopeOfWorkSchema] = None
     data_sheet_json: Optional[DataSheetSchema] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class HistoryDataResultsEnum(str, Enum):
     WON = "won"
@@ -303,9 +318,9 @@ class StatusEnum(str, Enum):
 
 class ActionHistoryItem(BaseModel):
     """Logs specific user-driven actions on a tender for history tracking."""
-    id: str
-    tender_id: str
-    user_id: str
+    id: Optional[str] = None  # Optional to handle cases where id might be missing
+    tender_id: Optional[str] = None  # Optional to handle cases where tender_id might be missing
+    user_id: Optional[str] = None  # Optional to handle system-generated actions
     action: TenderActionEnum
     notes: str
     timestamp: datetime
@@ -432,6 +447,14 @@ class FullTenderDetails(BaseModel):
     history: List[ActionHistoryItem] = []
     tender_history: List[TenderHistoryItem] = []
     model_config = ConfigDict(from_attributes=True)
+
+    @field_validator('city', 'state', mode='before')
+    @classmethod
+    def format_location_fields(cls, v):
+        """Ensure city and state are properly capitalized (title case)"""
+        if v and isinstance(v, str):
+            return v.title()
+        return v
 
     @field_validator("publish_date", "due_date", "last_date_of_bid_submission", "tender_opening_date", mode="before")
     @classmethod

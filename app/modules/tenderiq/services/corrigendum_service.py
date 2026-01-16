@@ -76,30 +76,46 @@ class CorrigendumTrackingService:
         Compare current tender data with new scraped data to detect changes.
         
         Args:
-            tender_id: The tender reference number
+            tender_id: The tender reference number or TDR
             new_scraped_data: New scraped data from the portal
             
         Returns:
             List of TenderChange objects representing detected changes
         """
-        # Get existing tender
-        tender = self.db.query(Tender).filter(Tender.tender_ref_number == tender_id).first()
-        if not tender:
-            return []
-        
-        # Get previous scraped data
-        old_scraped = self.db.query(ScrapedTender).filter(
+        # Get previous scraped data (compare ScrapedTender to ScrapedTender)
+        # Find all scrapes for this TDR, excluding the current one
+        all_scrapes = self.db.query(ScrapedTender).filter(
             ScrapedTender.tender_id_str == tender_id
-        ).order_by(ScrapedTender.id.desc()).first()
+        ).order_by(ScrapedTender.scraped_at.desc() if hasattr(ScrapedTender, 'scraped_at') else ScrapedTender.id.desc()).all()
         
+        # Find the previous scrape (not the current one)
+        old_scraped = None
+        for scrape in all_scrapes:
+            if scrape.id != new_scraped_data.id:
+                old_scraped = scrape
+                break
+        
+        # If no old scraped data found, try to get from Tender table
+        tender = None
         if not old_scraped:
-            return []
+            tender = self.db.query(Tender).filter(Tender.tender_ref_number == tender_id).first()
+            if not tender:
+                return []
         
         changes = []
         
         # Compare each tracked field
         for field in self.TRACKED_FIELDS:
-            old_value = getattr(old_scraped, field, None) if hasattr(old_scraped, field) else getattr(tender, field, None)
+            # Get old value from previous scrape or tender
+            if old_scraped:
+                old_value = getattr(old_scraped, field, None)
+            elif tender:
+                # Map field names between ScrapedTender and Tender
+                tender_field = self._map_to_tender_field(field)
+                old_value = getattr(tender, tender_field, None) if hasattr(tender, tender_field) else None
+            else:
+                old_value = None
+                
             new_value = getattr(new_scraped_data, field, None)
             
             # Detect change

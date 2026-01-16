@@ -6,6 +6,8 @@ from app.modules.tenderiq.router import router as tenderiq_router
 from app.modules.dmsiq.route import router as dmsiq_router
 from app.modules.bidsynopsis.router import router as bidsynopsis_router
 from app.modules.analyze.router import router as analyze_router
+from app.modules.legaliq.route import api_router as legaliq_router
+from app.modules.casetracker.routes import router as casetracker_router
 
 api_v1_router = APIRouter()
 
@@ -19,8 +21,11 @@ api_v1_router.include_router(tenderiq_router, prefix="/tenderiq")
 api_v1_router.include_router(dmsiq_router, prefix="/dms", tags=["DMS"])
 api_v1_router.include_router(bidsynopsis_router, prefix="/bidsynopsis", tags=["Bid Synopsis"])
 api_v1_router.include_router(analyze_router, prefix="/analyze", tags=["Analyze"])
+api_v1_router.include_router(legaliq_router)
+api_v1_router.include_router(casetracker_router, prefix="/casetracker", tags=["Case Tracker"])
 
 
 # In the future, you can add other module routers here:
 from app.modules.dashboard.route import router as dashboard_router
 api_v1_router.include_router(dashboard_router, prefix="/dashboard", tags=["Dashboard"])
+

@@ -50,14 +50,20 @@ def normalize_date_format(date_str: Optional[str]) -> str:
 
 
 # --- NEW HELPER FUNCTION ---
-def parse_indian_currency(value: Union[str, int, float, None]) -> int:
-    """Cleans an Indian monetary string (including 'Crore') and converts it to an integer."""
+def parse_indian_currency(value: Union[str, int, float, None]) -> Union[int, str]:
+    """Cleans an Indian monetary string (including 'Crore') and converts it to an integer.
+    Returns the original string if it contains 'Ref Document' or similar non-numeric text."""
     if value is None:
         return 0
     if isinstance(value, (int, float)):
         return int(value)
     if not isinstance(value, str):
         return 0
+    
+    # Check if the value contains "Ref Document" or similar text - return as-is
+    value_lower = value.lower()
+    if any(keyword in value_lower for keyword in ['ref document', 'refer document', 'refer to document', 'see document', 'as per document']):
+        return value
     
     # 1. Handle "Crore" conversion (1 Crore = 10,000,000)
     if "crore" in value.lower():
@@ -235,16 +241,30 @@ def get_full_tender_details(db: Session, tender_id: UUID, tdr: Optional[str] = N
     # APPLY THE RENAMED FUNCTION: parse_indian_currency
     try:
         if scraped_dict and "emd" in scraped_dict:
-            scraped_dict['emd'] = parse_indian_currency(scraped_dict['emd'])
+            parsed_emd = parse_indian_currency(scraped_dict['emd'])
+            # If parsing returns a string (non-numeric), set to None for Optional[int] field
+            scraped_dict['emd'] = parsed_emd if isinstance(parsed_emd, int) else None
         if scraped_dict and 'tender_value' in scraped_dict:
-            scraped_dict['tender_value'] = parse_indian_currency(scraped_dict['tender_value'])
+            parsed_value = parse_indian_currency(scraped_dict['tender_value'])
+            scraped_dict['tender_value'] = parsed_value if isinstance(parsed_value, int) else None
         if tender_dict and 'emd' in tender_dict:
-            tender_dict['emd'] = parse_indian_currency(tender_dict['emd'])
+            parsed_emd = parse_indian_currency(tender_dict['emd'])
+            tender_dict['emd'] = parsed_emd if isinstance(parsed_emd, int) else None
         if tender_dict and 'tender_value' in tender_dict:
-            tender_dict['tender_value'] = parse_indian_currency(tender_dict['tender_value'])
+            parsed_value = parse_indian_currency(tender_dict['tender_value'])
+            tender_dict['tender_value'] = parsed_value if isinstance(parsed_value, int) else None
     except Exception as e:
         logger.error(f"Error parsing currency values for tender {tender_id}: {str(e)}", exc_info=True)
         # Don't fail completely, just log and continue
+        # Set to None if parsing fails
+        if scraped_dict and "emd" in scraped_dict:
+            scraped_dict['emd'] = None
+        if scraped_dict and 'tender_value' in scraped_dict:
+            scraped_dict['tender_value'] = None
+        if tender_dict and 'emd' in tender_dict:
+            tender_dict['emd'] = None
+        if tender_dict and 'tender_value' in tender_dict:
+            tender_dict['tender_value'] = None
 
     # Sanitize string fields that can be legitimately None in the database
     string_fields_to_sanitize = [
@@ -318,6 +338,14 @@ def get_full_tender_details(db: Session, tender_id: UUID, tdr: Optional[str] = N
     elif not combined.get("state") and tender_dict.get("state"):
         combined["state"] = tender_dict["state"]
     
+    # FIX LOCATION FORMATTING: Ensure city and state are properly capitalized (title case)
+    if combined.get("city") and isinstance(combined.get("city"), str):
+        combined["city"] = combined["city"].title()
+    if combined.get("location") and isinstance(combined.get("location"), str):
+        combined["location"] = combined["location"].title()
+    if combined.get("state") and isinstance(combined.get("state"), str):
+        combined["state"] = combined["state"].title()
+    
     # FIX CATEGORY LOGIC: Ensure category is properly set from scraped_dict if tender_dict has None/empty
     # Category comes from query.query_name which we extracted earlier
     # This is critical - category must never be empty or None
@@ -371,6 +399,65 @@ def get_full_tender_details(db: Session, tender_id: UUID, tdr: Optional[str] = N
             combined[field] = datetime.min.replace(tzinfo=timezone.utc)
             
     # 4. Process history data: Final fixes for nested types and enums
+    # Initialize history array if not present
+    if "history" not in combined:
+        combined["history"] = []
+    
+    # Add scraped actions history from ScrapedTender if available
+    if scraped_dict and scraped_dict.get("actions_history_json"):
+        scraped_actions = scraped_dict.get("actions_history_json", {})
+        if isinstance(scraped_actions, dict) and scraped_actions.get("items"):
+            for action_item in scraped_actions.get("items", []):
+                # Convert scraped action to ActionHistoryItem format
+                action_history_item = {
+                    "id": f"scraped_action_{len(combined.get('history', []))}",
+                    "tender_id": str(tender.id) if tender else "",
+                    "user_id": None,  # Scraped actions don't have user info
+                    "action": action_item.get("action", "viewed"),
+                    "notes": action_item.get("notes") or action_item.get("note") or "",
+                    "timestamp": action_item.get("timestamp") or datetime.now(timezone.utc),
+                    "created_at": action_item.get("timestamp") or datetime.now(timezone.utc),
+                }
+                combined["history"].append(action_history_item)
+    
+    # Add default "scraped" action if no history exists and we have scraped data
+    # This ensures Actions History section always shows at least one entry
+    if not combined.get("history") and scraped_dict:
+        # Try to get scraped_at timestamp, fallback to publish_date or current time
+        scraped_at = None
+        if scraped_dict.get("scraped_at"):
+            scraped_at = scraped_dict.get("scraped_at")
+        elif scraped_dict.get("publish_date"):
+            try:
+                from dateutil import parser as date_parser
+                scraped_at = date_parser.parse(scraped_dict.get("publish_date"), dayfirst=True)
+            except:
+                pass
+        
+        if not scraped_at:
+            scraped_at = datetime.now(timezone.utc)
+        
+        # Ensure scraped_at is a datetime object
+        if isinstance(scraped_at, str):
+            try:
+                from dateutil import parser as date_parser
+                scraped_at = date_parser.parse(scraped_at)
+            except:
+                scraped_at = datetime.now(timezone.utc)
+        elif not isinstance(scraped_at, datetime):
+            scraped_at = datetime.now(timezone.utc)
+        
+        default_action = {
+            "id": "scraped_default",
+            "tender_id": str(tender.id) if tender else "",
+            "user_id": None,
+            "action": "viewed",  # Use "viewed" as default action type
+            "notes": "Tender scraped and added to system",
+            "timestamp": scraped_at,
+            "created_at": scraped_at,
+        }
+        combined["history"].append(default_action)
+    
     if "history" in combined and combined["history"]:
         new_history = []
         for item in combined["history"]:
@@ -520,6 +607,35 @@ def get_full_tender_details(db: Session, tender_id: UUID, tdr: Optional[str] = N
 
     # HACK: Remove the 'history' item if the "action" is empty (only for tender_action_history, not corrigendum)
     combined["history"] = [item for item in combined["history"] if item.get("action") is not None]
+
+    # Sanitize integer fields: ensure they are either int or None (not strings)
+    integer_fields = ["emd", "tender_value", "estimated_cost", "bid_security", "length_km", 
+                     "per_km_cost", "span_length", "road_work_amount", "structure_work_amount"]
+    for field in integer_fields:
+        if field in combined:
+            value = combined[field]
+            if isinstance(value, str):
+                # Try to parse as integer, if fails set to None
+                try:
+                    # Remove common non-numeric text
+                    cleaned = value.lower().strip()
+                    if any(keyword in cleaned for keyword in ['ref document', 'refer document', 'refer to document', 'see document', 'as per document', 'n/a', 'na', 'not applicable']):
+                        combined[field] = None
+                    else:
+                        # Try to extract number from string
+                        numbers = re.findall(r'\d+', value.replace(',', ''))
+                        if numbers:
+                            combined[field] = int(numbers[0])
+                        else:
+                            combined[field] = None
+                except (ValueError, TypeError):
+                    combined[field] = None
+            elif value is not None and not isinstance(value, int):
+                # If it's a float or Decimal, convert to int
+                try:
+                    combined[field] = int(value)
+                except (ValueError, TypeError):
+                    combined[field] = None
 
     # Validate the modified dictionary
     try:

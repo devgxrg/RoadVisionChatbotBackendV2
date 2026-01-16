@@ -33,6 +33,7 @@ class Settings:
     # API Keys
     GOOGLE_API_KEY: str = ""
     LLAMA_CLOUD_API_KEY: str = ""
+    LEGAL_CASE_API_KEY: str = ""
     
     # PostgreSQL
     POSTGRES_USER: str = "postgres"
@@ -64,7 +65,7 @@ class Settings:
 
     def _load_and_validate_env(self):
         """Load and validate environment variables"""
-        print("🔍 Loading environment variables...")
+        print("Loading environment variables...")
         
         env_path = self.ROOT_DIR / '.env'
         if env_path.exists():
@@ -74,13 +75,18 @@ class Settings:
 
         google_api_key = os.getenv("GOOGLE_API_KEY")
         if not google_api_key:
-            raise Exception("❌ GOOGLE_API_KEY not found in environment!")
+            raise Exception("ERROR: GOOGLE_API_KEY not found in environment!")
         self.GOOGLE_API_KEY = google_api_key
 
         llama_api_key = os.getenv("LLAMA_CLOUD_API_KEY")
         if not llama_api_key:
-            raise Exception("❌ LLAMA_CLOUD_API_KEY not found in environment!")
+            raise Exception("ERROR: LLAMA_CLOUD_API_KEY not found in environment!")
         self.LLAMA_CLOUD_API_KEY = llama_api_key
+        
+        legal_case_api_key = os.getenv("LEGAL_CASE_API_KEY")
+        if not legal_case_api_key:
+            print("WARNING: LEGAL_CASE_API_KEY not found in environment. Legal research will not work.")
+        self.LEGAL_CASE_API_KEY = legal_case_api_key
         
         # Load PostgreSQL settings
         self.POSTGRES_USER = os.getenv("POSTGRES_USER", self.POSTGRES_USER)
@@ -94,9 +100,10 @@ class Settings:
             f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
         )
         
-        print(f"✅ GOOGLE_API_KEY: configured")
-        print(f"✅ LLAMA_CLOUD_API_KEY: {'configured' if self.LLAMA_CLOUD_API_KEY else 'not configured (optional)'}")
-        print(f"✅ PostgreSQL: configured at {self.POSTGRES_HOST}:{self.POSTGRES_PORT}")
+        print(f"[OK] GOOGLE_API_KEY: configured")
+        print(f"[OK] LLAMA_CLOUD_API_KEY: {'configured' if self.LLAMA_CLOUD_API_KEY else 'not configured (optional)'}")
+        print(f"[OK] LEGAL_CASE_API_KEY: {'configured' if self.LEGAL_CASE_API_KEY else 'not configured (optional)'}")
+        print(f"[OK] PostgreSQL: configured at {self.POSTGRES_HOST}:{self.POSTGRES_PORT}")
 
         # Load Redis settings and configure Celery URLs
         self.REDIS_HOST = os.getenv("REDIS_HOST", self.REDIS_HOST)
@@ -104,7 +111,7 @@ class Settings:
         self.REDIS_DB = int(os.getenv("REDIS_DB", self.REDIS_DB))
         self.CELERY_BROKER_URL = f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
         self.CELERY_RESULT_BACKEND_URL = f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
-        print(f"✅ Redis: configured at {self.REDIS_HOST}:{self.REDIS_PORT}")
+        print(f"[OK] Redis: configured at {self.REDIS_HOST}:{self.REDIS_PORT}")
 
         # Load security settings
         self.JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", self.JWT_SECRET_KEY)
@@ -114,7 +121,7 @@ class Settings:
         # Load feature flags
         self.USE_LANGCHAIN_RAG = os.getenv("USE_LANGCHAIN_RAG", "false").lower() == "true"
         if self.USE_LANGCHAIN_RAG:
-            print("⚠️  LANGCHAIN_RAG: enabled (Phase 1+ migration in progress)")
+            print("[WARN] LANGCHAIN_RAG: enabled (Phase 1+ migration in progress)")
 
 # Singleton instance
 settings = Settings()

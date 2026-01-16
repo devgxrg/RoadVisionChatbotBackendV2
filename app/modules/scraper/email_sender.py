@@ -74,9 +74,32 @@ def listen_and_get_unprocessed_emails() -> list[dict] | None:
     mail = None
     unprocessed_emails = []
 
+    # Validate credentials before attempting connection
+    if not SENDER_EMAIL or not SENDER_EMAIL.strip():
+        print("❌ Error: SENDER_EMAIL environment variable is not set or is empty.")
+        print("   Please set SENDER_EMAIL in your .env file.")
+        return None
+    
+    if not SENDER_APP_PASSWORD or not SENDER_APP_PASSWORD.strip():
+        print("❌ Error: SENDER_APP_PASSWORD environment variable is not set or is empty.")
+        print("   Please set SENDER_APP_PASSWORD in your .env file.")
+        return None
+
+    if not IMAP_SERVER or not IMAP_SERVER.strip():
+        print("❌ Error: IMAP_SERVER environment variable is not set or is empty.")
+        print("   Please set IMAP_SERVER in your .env file (default: imap.gmail.com).")
+        return None
+
     try:
         mail = imaplib.IMAP4_SSL(IMAP_SERVER)
-        mail.login(SENDER_EMAIL, SENDER_APP_PASSWORD)
+        # Ensure credentials are strings and properly encoded
+        email_cred = str(SENDER_EMAIL).strip()
+        password_cred = str(SENDER_APP_PASSWORD).strip()
+        
+        if not email_cred or not password_cred:
+            raise ValueError("Email or password is empty after stripping whitespace")
+        
+        mail.login(email_cred, password_cred)
         mail.select("inbox")
         print("✅ Email listener connected to inbox.")
 
@@ -151,8 +174,16 @@ def listen_and_get_unprocessed_emails() -> list[dict] | None:
                     print(f"⚠️  Error processing email {email_id}: {e}")
                     continue
 
+    except imaplib.IMAP4.error as e:
+        error_msg = str(e)
+        if "LOGIN" in error_msg or "authentication" in error_msg.lower():
+            print(f"❌ IMAP Authentication Error: {error_msg}")
+            print("   Please verify your SENDER_EMAIL and SENDER_APP_PASSWORD in .env file.")
+            print("   For Gmail, make sure you're using an App Password, not your regular password.")
+        else:
+            print(f"❌ IMAP Error: {error_msg}")
     except Exception as e:
-        print(f"❌ An error occurred while checking emails: {e}")
+        print(f"❌ An error occurred while checking emails: {type(e).__name__}: {e}")
     finally:
         if mail:
             try:
@@ -175,10 +206,26 @@ def listen_and_get_link() -> str | None:
     Connects to the inbox, searches for the newest unread email from a target sender,
     and extracts the scraping link from it.
     """
+    # Validate credentials before attempting connection
+    if not SENDER_EMAIL or not SENDER_EMAIL.strip():
+        print("❌ Error: SENDER_EMAIL environment variable is not set or is empty.")
+        return None
+    
+    if not SENDER_APP_PASSWORD or not SENDER_APP_PASSWORD.strip():
+        print("❌ Error: SENDER_APP_PASSWORD environment variable is not set or is empty.")
+        return None
+
     mail = None
     try:
         mail = imaplib.IMAP4_SSL(IMAP_SERVER)
-        mail.login(SENDER_EMAIL, SENDER_APP_PASSWORD)
+        # Ensure credentials are strings and properly encoded
+        email_cred = str(SENDER_EMAIL).strip()
+        password_cred = str(SENDER_APP_PASSWORD).strip()
+        
+        if not email_cred or not password_cred:
+            raise ValueError("Email or password is empty after stripping whitespace")
+        
+        mail.login(email_cred, password_cred)
         mail.select("inbox")
         print("✅ Listener connected to inbox.")
 

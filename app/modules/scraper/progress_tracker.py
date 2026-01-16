@@ -20,6 +20,7 @@ from typing import Optional
 from tqdm import tqdm
 from datetime import datetime
 import sys
+import io
 
 # ==================== Logging Configuration ====================
 
@@ -27,6 +28,9 @@ import sys
 def setup_scraper_logger(name: str = "scraper") -> logging.Logger:
     """
     Configure structured logging for the scraper.
+    
+    Handles Unicode encoding issues on Windows by wrapping stdout/stderr
+    with UTF-8 encoding.
 
     Returns:
         logging.Logger: Configured logger instance
@@ -44,13 +48,51 @@ def setup_scraper_logger(name: str = "scraper") -> logging.Logger:
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 
-    # Console handler (INFO and above)
-    console_handler = logging.StreamHandler(sys.stdout)
+    # Wrap stdout/stderr with UTF-8 encoding for Windows compatibility
+    # This prevents UnicodeEncodeError when logging emoji characters
+    try:
+        if hasattr(sys.stdout, 'encoding') and sys.stdout.encoding != 'utf-8':
+            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+        if hasattr(sys.stderr, 'encoding') and sys.stderr.encoding != 'utf-8':
+            sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+    except (AttributeError, io.UnsupportedOperation):
+        # If wrapping fails (e.g., in some environments), continue without it
+        pass
+
+    # Custom StreamHandler that handles Unicode encoding errors gracefully
+    class SafeStreamHandler(logging.StreamHandler):
+        def emit(self, record):
+            try:
+                super().emit(record)
+            except UnicodeEncodeError:
+                # Fallback: replace problematic characters with ASCII equivalents
+                try:
+                    msg = self.format(record)
+                    stream = self.stream
+                    # Replace emojis with ASCII equivalents
+                    msg = msg.replace('📍', '[LOC]')
+                    msg = msg.replace('📧', '[EMAIL]')
+                    msg = msg.replace('✅', '[OK]')
+                    msg = msg.replace('ℹ️', '[INFO]')
+                    msg = msg.replace('📊', '[STATS]')
+                    msg = msg.replace('✨', '[SUMMARY]')
+                    stream.write(msg + self.terminator)
+                    self.flush()
+                except Exception:
+                    self.handleError(record)
+    
+    # Console handler (INFO and above) with safe Unicode handling
+    console_handler = SafeStreamHandler(sys.stdout)
     console_handler.setLevel(logging.INFO)
     console_handler.setFormatter(detailed_formatter)
 
     # File handler (DEBUG and above) - useful for post-execution analysis
-    file_handler = logging.FileHandler("scraper.log")
+    # Use UTF-8 encoding for file handler
+    try:
+        file_handler = logging.FileHandler("scraper.log", encoding='utf-8')
+    except TypeError:
+        # Fallback for older Python versions
+        file_handler = logging.FileHandler("scraper.log")
     file_handler.setLevel(logging.DEBUG)
     file_handler.setFormatter(detailed_formatter)
 

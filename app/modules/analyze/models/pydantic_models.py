@@ -1,7 +1,7 @@
 """
 Pydantic schemas for the structured JSON data stored in TenderAnalysis.
 """
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Optional, Dict, Any, Literal
 from datetime import datetime
 
@@ -178,8 +178,7 @@ class TenderAnalysisResponse(BaseModel):
     data_sheet: Optional[DataSheetSchema] = None
     templates: Optional[TemplatesResponseSchema] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ============================================================================
@@ -215,9 +214,9 @@ class TenderWishlistItemSchema(BaseModel):
     evaluated_state: bool = Field(description="Whether evaluation is completed")
     results: Literal["won", "rejected", "incomplete", "pending"] = Field(description="Final tender result status")
 
-    class Config:
-        from_attributes = True
-        json_schema_extra = {
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_schema_extra={
             "example": {
                 "id": "wish_123",
                 "tender_ref_number": "TEND_2025_001",
@@ -235,6 +234,7 @@ class TenderWishlistItemSchema(BaseModel):
                 "results": "pending"
             }
         }
+    )
 
 
 class HistoryWishlistResponseSchema(BaseModel):
@@ -245,8 +245,8 @@ class HistoryWishlistResponseSchema(BaseModel):
     report_file_url: str = Field(description="URL to download comprehensive Excel report")
     tenders: List[TenderWishlistItemSchema] = Field(description="List of all saved tenders")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "report_file_url": "https://api.example.com/api/tenderiq/download/comprehensive-report",
                 "tenders": [
@@ -285,6 +285,7 @@ class HistoryWishlistResponseSchema(BaseModel):
                 ]
             }
         }
+    )
 
 
 class AddToWishlistRequestSchema(BaseModel):
@@ -297,8 +298,8 @@ class AddToWishlistRequestSchema(BaseModel):
     due_date: str
     category: str
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "tender_ref_number": "TEND_2025_001",
                 "title": "Road Construction Project",
@@ -309,6 +310,7 @@ class AddToWishlistRequestSchema(BaseModel):
                 "category": "Civil Works"
             }
         }
+    )
 
 
 class UpdateWishlistProgressRequestSchema(BaseModel):
@@ -321,8 +323,8 @@ class UpdateWishlistProgressRequestSchema(BaseModel):
     status_message: Optional[str] = None
     error_message: Optional[str] = None
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "progress": 80,
                 "analysis_state": True,
@@ -330,3 +332,4 @@ class UpdateWishlistProgressRequestSchema(BaseModel):
                 "status_message": "Analysis completed successfully"
             }
         }
+    )

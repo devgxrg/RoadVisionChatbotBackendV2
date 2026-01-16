@@ -27,6 +27,9 @@ import pandas as pd
 from sentence_transformers import SentenceTransformer
 import chromadb
 from chromadb.config import Settings
+import difflib
+from docx import Document
+import shutil
 
 # --- STABILITY FIXES ---
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -1249,7 +1252,138 @@ INSTRUCTIONS:
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
-# --- STARTUP ---
+# --- DOCUMENT COMPARE ENDPOINTS ---
+
+def extract_text_from_pdf(file_path: str) -> List[str]:
+    """Extract text from PDF, returning a list of strings per page."""
+    doc = fitz.open(file_path)
+    pages_text = []
+    for page in doc:
+        pages_text.append(page.get_text())
+    return pages_text
+
+def extract_text_from_docx(file_path: str) -> List[str]:
+    """Extract text from DOCX."""
+    doc = Document(file_path)
+    full_text = []
+    for para in doc.paragraphs:
+        full_text.append(para.text)
+    return ["\n".join(full_text)]
+
+def get_file_text(file_path: str, filename: str) -> List[str]:
+    if filename.lower().endswith('.pdf'):
+        return extract_text_from_pdf(file_path)
+    elif filename.lower().endswith('.docx') or filename.lower().endswith('.doc'):
+        return extract_text_from_docx(file_path)
+    else:
+        # Fallback for text files
+        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+            return [f.read()]
+
+def calculate_similarity(text1: str, text2: str) -> float:
+    return difflib.SequenceMatcher(None, text1, text2).ratio()
+
+@app.route('/api/v1/legaliq/compare-documents', methods=['POST'])
+def compare_documents():
+    if 'file1' not in request.files or 'file2' not in request.files:
+        return jsonify({"error": "Both file1 and file2 are required"}), 400
+
+    file1 = request.files['file1']
+    file2 = request.files['file2']
+    
+    if file1.filename == '' or file2.filename == '':
+        return jsonify({"error": "No selected file"}), 400
+
+    temp_dir = tempfile.mkdtemp()
+    try:
+        file1_path = os.path.join(temp_dir, file1.filename)
+        file2_path = os.path.join(temp_dir, file2.filename)
+
+        file1.save(file1_path)
+        file2.save(file2_path)
+
+        text1_pages = get_file_text(file1_path, file1.filename)
+        text2_pages = get_file_text(file2_path, file2.filename)
+
+        # Flatten text for global comparison metrics
+        full_text1 = "\n".join(text1_pages)
+        full_text2 = "\n".join(text2_pages)
+
+        similarity = calculate_similarity(full_text1, full_text2)
+        similarity_score = f"{int(similarity * 100)}%"
+
+        # Detailed Diff
+        d = difflib.Differ()
+        diff = list(d.compare(full_text1.splitlines(), full_text2.splitlines()))
+
+        additions = 0
+        deletions = 0
+        modifications = 0
+        changes = []
+
+        for i, line in enumerate(diff):
+            if line.startswith('+ '):
+                additions += 1
+                changes.append({
+                    "type": "addition",
+                    "page": 1, # Placeholder
+                    "content": line[2:].strip(),
+                    "original": ""
+                })
+            elif line.startswith('- '):
+                deletions += 1
+                changes.append({
+                    "type": "deletion",
+                    "page": 1, # Placeholder
+                    "content": line[2:].strip(),
+                    "original": line[2:].strip()
+                })
+
+        # Refine modifications
+        refined_changes = []
+        skip_next = False
+        
+        for i in range(len(changes)):
+            if skip_next:
+                skip_next = False
+                continue
+                
+            current = changes[i]
+            next_change = changes[i+1] if i+1 < len(changes) else None
+            
+            if (current['type'] == 'deletion' and next_change and next_change['type'] == 'addition'):
+                # It's a modification
+                modifications += 1
+                deletions -= 1
+                additions -= 1
+                
+                refined_changes.append({
+                    "type": "modification",
+                    "page": current['page'],
+                    "content": next_change['content'],
+                    "original": current['content']
+                })
+                skip_next = True
+            else:
+                refined_changes.append(current)
+
+        return jsonify({
+            "summary": {
+                "additions": additions,
+                "deletions": deletions,
+                "modifications": modifications,
+                "similarityScore": similarity_score
+            },
+            "changes": refined_changes[:100] # Limit changes
+        })
+
+    except Exception as e:
+        print(f"Error comparing documents: {e}")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        shutil.rmtree(temp_dir)
+
+# --- MAIN EXECUTION ---
 
 if __name__ == "__main__":
     print("\n" + "="*70)

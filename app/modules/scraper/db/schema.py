@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, date
 
-from sqlalchemy import Column, String, DateTime, Date, ForeignKey, Text, Index, Boolean
+from sqlalchemy import Column, String, DateTime, Date, ForeignKey, Text, Index, Boolean, JSON
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
@@ -136,6 +136,12 @@ class ScrapedTender(Base):
 
     # TenderDetailOtherDetail
     information_source = Column(String, nullable=True)
+
+    # Document Changes & Corrigendums (scraped from page)
+    document_changes_json = Column(JSON, nullable=True)  # Stores TenderDocumentChanges as JSON
+    
+    # Actions History (scraped from page)
+    actions_history_json = Column(JSON, nullable=True)  # Stores TenderActionsHistory as JSON
 
     files = relationship("ScrapedTenderFile", back_populates="tender", cascade="all, delete-orphan")
     

@@ -235,7 +235,11 @@ from .data_models import (
     TenderDetailNotice, 
     TenderDetailOtherDetail, 
     TenderDetailPage, 
-    TenderDetailPageFile
+    TenderDetailPageFile,
+    TenderDocumentChanges,
+    TenderHistoryItem,
+    TenderActionsHistory,
+    TenderActionHistoryItem
 )
 
 # Configure logger
@@ -383,6 +387,275 @@ def scrape_other_details(table: Optional[Tag]) -> TenderDetailOtherDetail:
 
     return TenderDetailOtherDetail(information_source=information_source, files=files)
 
+def scrape_document_changes(soup: BeautifulSoup) -> Optional[TenderDocumentChanges]:
+    """
+    Scrape the "Document Changes & Corrigendums" section from the tender detail page.
+    Looks for tables or sections with titles like "Document Changes", "Corrigendums", etc.
+    """
+    try:
+        items: List[TenderHistoryItem] = []
+        
+        # Look for section with document changes/corrigendums
+        # Try multiple possible selectors
+        possible_selectors = [
+            {'class': 'document-changes'},
+            {'class': 'corrigendums'},
+            {'class': 'tender-history'},
+            {'id': 'document-changes'},
+            {'id': 'corrigendums'},
+            {'id': 'tender-history'},
+        ]
+        
+        changes_section = None
+        for selector in possible_selectors:
+            changes_section = soup.find('div', selector) or soup.find('section', selector) or soup.find('table', selector)
+            if changes_section:
+                break
+        
+        # Also try finding by text content - search more broadly
+        # IMPORTANT: Exclude the main tender notice/details tables (first 5 tables)
+        if not changes_section:
+            # Get all tables, but skip the first 5 (they are: Notice, Details, Key Dates, Contact, Other)
+            all_tables = soup.find_all('table')
+            # Start from table index 5 onwards (6th table and beyond)
+            for table in all_tables[5:]:
+                table_text = table.text.lower()
+                # Look for headings that specifically indicate corrigendum/changes section
+                # Must have keywords AND not be one of the main tender info tables
+                header_text = ""
+                header_row = table.find('tr')
+                if header_row:
+                    header_text = header_row.text.lower()
+                
+                # Check if this is a corrigendum/changes table (not the main tender tables)
+                is_corrigendum_table = (
+                    any(keyword in header_text for keyword in ['corrigendum', 'amendment', 'change', 'modification', 'history']) or
+                    any(keyword in table_text[:300] for keyword in ['document changes', 'corrigendum', 'amendment', 'tender history'])
+                ) and not any(keyword in header_text for keyword in ['tender notice', 'tender details', 'key dates', 'contact information', 'other detail'])
+                
+                if is_corrigendum_table:
+                    rows_in_table = table.find_all('tr')
+                    if len(rows_in_table) > 1:  # Has data rows
+                        changes_section = table
+                        logger.debug(f"Found corrigendum section: table with {len(rows_in_table)} rows")
+                        break
+        
+        # Also search divs/sections (but exclude tender-details-home children)
+        if not changes_section:
+            tender_details_home = soup.find('div', attrs={'class': 'tender-details-home'})
+            if tender_details_home:
+                # Look for sections AFTER the main tender details
+                all_divs = soup.find_all(['div', 'section'])
+                for div in all_divs:
+                    # Skip if it's inside tender-details-home (those are the main tables)
+                    if tender_details_home in div.parents if hasattr(div, 'parents') else False:
+                        continue
+                    
+                    div_text = div.text.lower()
+                    # Look for corrigendum-specific headings
+                    if any(keyword in div_text[:200] for keyword in ['document changes', 'corrigendum', 'amendment', 'change history']):
+                        # Check if it has actual content (not just a heading)
+                        if len(div.find_all('tr')) > 1 or len(div.find_all('div', class_=lambda x: x and 'item' in str(x).lower())) > 0:
+                            changes_section = div
+                            break
+        
+        if not changes_section:
+            logger.debug("Document changes section not found on page")
+            return TenderDocumentChanges(items=[])
+        
+        # Parse the table/section to extract history items
+        if changes_section.name == 'table':
+            rows = changes_section.find_all('tr')[1:]  # Skip header row
+        else:
+            # For divs/sections, try multiple selectors
+            rows = (changes_section.find_all('div', class_='history-item') or 
+                   changes_section.find_all('div', class_='change-item') or
+                   changes_section.find_all('div', class_='corrigendum-item') or
+                   changes_section.find_all('tr') or
+                   [changes_section])  # Fallback to the section itself
+        
+        for row in rows:
+            try:
+                cells = row.find_all(['td', 'div'])
+                if len(cells) < 2:
+                    continue
+                
+                # Try to extract information from cells
+                # Common structure: Date | Type | Note | Files
+                item_type = "corrigendum"  # Default
+                note = ""
+                update_date = ""
+                files_changed: List[TenderDetailPageFile] = []
+                date_change_from = None
+                date_change_to = None
+                
+                # Skip header rows - check if first cell looks like a header
+                first_cell_text = cells[0].text.strip().lower() if len(cells) > 0 else ""
+                if first_cell_text in ['tdr', 'tender no', 'tendering authority', 'tender id', 'tender brief', 
+                                       'city', 'state', 'document fees', 'emd', 'tender value', 'tender type',
+                                       'bidding type', 'competition type', 'date', 'type', 'note', 'description',
+                                       'action', 'timestamp', 'user']:
+                    continue  # Skip header row
+                
+                # Extract date (usually first column)
+                date_text = cells[0].text.strip() if len(cells) > 0 else ""
+                # Validate it looks like a date (not a field name)
+                if date_text and not any(keyword in date_text.lower() for keyword in ['tdr', 'tender', 'authority', 'city', 'state', 'emd', 'value']):
+                    # Try to parse as date
+                    try:
+                        from dateutil import parser as date_parser
+                        date_parser.parse(date_text)  # Validate it's a date
+                        update_date = date_text
+                    except:
+                        pass  # Not a valid date, skip
+                
+                # Extract type (corrigendum, amendment, etc.)
+                if len(cells) > 1:
+                    type_text = cells[1].text.strip().lower()
+                    if 'corrigendum' in type_text:
+                        item_type = "corrigendum"
+                    elif 'amendment' in type_text:
+                        item_type = "amendment"
+                    elif 'extension' in type_text or 'deadline' in type_text:
+                        item_type = "bid_deadline_extension"
+                    elif 'date' in type_text and 'extension' in type_text:
+                        item_type = "due_date_extension"
+                
+                # Extract note/description (usually last column or second-to-last)
+                if len(cells) > 2:
+                    note = cells[2].text.strip()
+                elif len(cells) > 1:
+                    note = cells[1].text.strip()
+                
+                # Validate note doesn't look like a field name
+                if note and any(keyword in note.lower() for keyword in ['tdr', 'tender no', 'tendering authority', 'city', 'state']):
+                    note = ""  # Probably a field name, not a note
+                
+                # Look for date changes in the note
+                if 'from' in note.lower() and 'to' in note.lower():
+                    # Try to extract date change
+                    import re
+                    date_pattern = r'(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})'
+                    dates = re.findall(date_pattern, note)
+                    if len(dates) >= 2:
+                        date_change_from = dates[0]
+                        date_change_to = dates[1]
+                
+                # Extract file links if present
+                links = row.find_all('a', href=True)
+                for link in links:
+                    href = link.get('href', '')
+                    if href and ('download' in href.lower() or '.pdf' in href.lower() or '.doc' in href.lower()):
+                        files_changed.append(TenderDetailPageFile(
+                            file_name=link.text.strip() or href.split('/')[-1],
+                            file_url=str(href),
+                            file_description="Document",
+                            file_size="Unknown"
+                        ))
+                
+                if update_date or note:
+                    items.append(TenderHistoryItem(
+                        id=None,
+                        type=item_type,
+                        note=note or "No description available",
+                        update_date=update_date or "N/A",
+                        files_changed=files_changed,
+                        date_change_from=date_change_from,
+                        date_change_to=date_change_to
+                    ))
+            except Exception as e:
+                logger.debug(f"Error parsing history row: {e}")
+                continue
+        
+        return TenderDocumentChanges(items=items)
+    except Exception as e:
+        logger.warning(f"Error scraping document changes: {e}")
+        return TenderDocumentChanges(items=[])
+
+def scrape_actions_history(soup: BeautifulSoup) -> Optional[TenderActionsHistory]:
+    """
+    Scrape the "Actions History" section from the tender detail page.
+    Looks for tables or sections showing user actions on the tender.
+    """
+    try:
+        items: List[TenderActionHistoryItem] = []
+        
+        # Look for actions history section
+        possible_selectors = [
+            {'class': 'actions-history'},
+            {'class': 'action-history'},
+            {'class': 'tender-actions'},
+            {'id': 'actions-history'},
+            {'id': 'action-history'},
+        ]
+        
+        actions_section = None
+        for selector in possible_selectors:
+            actions_section = soup.find('div', selector) or soup.find('section', selector) or soup.find('table', selector)
+            if actions_section:
+                break
+        
+        # Also try finding by text content
+        if not actions_section:
+            all_tables = soup.find_all('table')
+            for table in all_tables:
+                table_text = table.text.lower()
+                if any(keyword in table_text for keyword in ['actions history', 'action history', 'activity log', 'user actions']):
+                    header_row = table.find('tr')
+                    if header_row and any(keyword in header_row.text.lower() for keyword in ['action', 'timestamp', 'date', 'user', 'time']):
+                        actions_section = table
+                        break
+        
+        if not actions_section:
+            return TenderActionsHistory(items=[])
+        
+        # Parse the table/section to extract action items
+        rows = actions_section.find_all('tr')[1:] if actions_section.name == 'table' else actions_section.find_all('div', class_='action-item')
+        
+        for row in rows:
+            try:
+                cells = row.find_all(['td', 'div'])
+                if len(cells) < 1:
+                    continue
+                
+                # Common structure: Action | Timestamp | User | Notes
+                action = ""
+                timestamp = ""
+                user = None
+                notes = None
+                
+                # Extract action (usually first column)
+                if len(cells) > 0:
+                    action = cells[0].text.strip()
+                
+                # Extract timestamp
+                if len(cells) > 1:
+                    timestamp = cells[1].text.strip()
+                
+                # Extract user
+                if len(cells) > 2:
+                    user = cells[2].text.strip() or None
+                
+                # Extract notes
+                if len(cells) > 3:
+                    notes = cells[3].text.strip() or None
+                
+                if action or timestamp:
+                    items.append(TenderActionHistoryItem(
+                        action=action or "Unknown action",
+                        timestamp=timestamp or "N/A",
+                        user=user,
+                        notes=notes
+                    ))
+            except Exception as e:
+                logger.debug(f"Error parsing action row: {e}")
+                continue
+        
+        return TenderActionsHistory(items=items)
+    except Exception as e:
+        logger.warning(f"Error scraping actions history: {e}")
+        return TenderActionsHistory(items=[])
+
 def scrape_tender(tender_link: str) -> Optional[TenderDetailPage]:
     try:
         headers = {
@@ -417,12 +690,18 @@ def scrape_tender(tender_link: str) -> Optional[TenderDetailPage]:
             elif "contact information" in txt: tables['contact'] = tbl
             elif "other detail" in txt: tables['other'] = tbl
 
+        # Scrape document changes and actions history sections
+        document_changes = scrape_document_changes(soup)
+        actions_history = scrape_actions_history(soup)
+        
         return TenderDetailPage(
             notice=scrape_notice_table(tables['notice']),
             details=scrape_details(tables['details']),
             key_dates=scrape_key_dates(tables['dates']),
             contact_information=scrape_contact_information(tables['contact']),
-            other_detail=scrape_other_details(tables['other'])
+            other_detail=scrape_other_details(tables['other']),
+            document_changes=document_changes,
+            actions_history=actions_history
         )
 
     except Exception as e:
